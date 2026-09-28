@@ -5,7 +5,7 @@ import streamlit as st
 from bs4 import BeautifulSoup
 from urllib.parse import quote_plus
 
-st.set_page_config(page_title="SDG Company Data Explorer", page_icon="🌍", layout="wide")
+st.set_page_config(page_title="SDG Impact Scorecard", page_icon="🌍", layout="wide")
 
 SDGS = {
     1: ("No Poverty", ["poverty", "living wage", "financial inclusion", "community investment"]),
