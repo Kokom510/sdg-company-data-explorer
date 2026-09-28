@@ -82,8 +82,25 @@ st.caption("SDG Sector Impact Scoring Model to assess a potential or existing in
 with st.sidebar:
     st.header("Company")
     company = st.text_input("Company name", "Nedbank")
+    st.header("Enter Company Name")
+
+company_options = [
+    f"{name} ({ticker})"
+    for name, ticker in jse_companies.items()
+]
+
+company_selected = st.selectbox(
+    "Company",
+    company_options,
+    index=None,
+    placeholder="Start typing a company name..."
+)
+
+if company_selected:
+    company = company_selected.rsplit(" (", 1)[0]
+    ticker = company_selected.rsplit("(", 1)[1].replace(")", "")
     n = st.slider("Web results to collect", 3, 12, 8)
-    run = st.button("Collect SDG data", type="primary")
+    run = st.button("Enter", type="primary")
     st.divider()
     st.markdown("**Important:** Scores are a transparent keyword-based research proxy, not an official SDG rating. Validate evidence before using it for investment, reporting or client decisions.")
 
