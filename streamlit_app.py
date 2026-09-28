@@ -76,16 +76,65 @@ def score_sdgs(text):
         evidence[n] = [x[0] for x in sorted(hits, key=lambda z: z[1], reverse=True)[:4]]
     return scores, evidence
 
-st.title("🌍 SDG Company Data Explorer")
+st.title("🌍 SDG Impact Scorecard")
 st.caption("Internet-assisted prototype for collecting company sustainability disclosures and mapping them to the UN Sustainable Development Goals.")
 
 with st.sidebar:
-    st.header("Company")
-    company = st.text_input("Company name", "Nedbank")
-    n = st.slider("Web results to collect", 3, 12, 8)
-    run = st.button("Collect SDG data", type="primary")
+    st.header("Enter Company Name")
+
+    company_list = [
+        "Nedbank",
+        "Standard Bank",
+        "FirstRand",
+        "Absa",
+        "Capitec",
+        "Sanlam",
+        "Old Mutual",
+        "Sasol",
+        "MTN",
+        "Vodacom",
+        "Shoprite",
+        "Woolworths",
+        "Microsoft",
+        "Apple",
+        "Amazon",
+        "Google",
+        "Tesla",
+        "Unilever"
+    ]
+
+    company = st.text_input(
+        "Company",
+        placeholder="Start typing a company name..."
+    )
+
+    # Show company hints while typing
+    if company:
+        hints = [
+            c for c in company_list
+            if company.lower() in c.lower()
+        ]
+
+        if hints:
+            st.caption("Company suggestions:")
+            for hint in hints[:5]:
+                st.write(f"• {hint}")
+
+    n = st.slider(
+        "Web results to collect",
+        3,
+        12,
+        8
+    )
+
+    run = st.button(
+        "Enter",
+        type="primary",
+        use_container_width=True
+    )
+
     st.divider()
-    st.markdown("**Important:** Scores are a transparent keyword-based research proxy, not an official SDG rating. Validate evidence before using it for investment, reporting or client decisions.")
+
 
 if run:
     with st.spinner("Searching the internet and analysing public disclosures..."):
