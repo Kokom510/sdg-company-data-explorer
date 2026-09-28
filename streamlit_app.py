@@ -7,6 +7,22 @@ from urllib.parse import quote_plus
 
 st.set_page_config(page_title="SDG Impact Scorecard", page_icon="🌍", layout="wide")
 
+
+st.markdown("""
+<style>
+div.stButton > button[kind="primary"] {
+    background-color: #0066CC;
+    color: white;
+    border: none;
+}
+
+div.stButton > button[kind="primary"]:hover {
+    background-color: #0052A3;
+    color: white;
+}
+</style>
+""", unsafe_allow_html=True)
+
 SDGS = {
     1: ("No Poverty", ["poverty", "living wage", "financial inclusion", "community investment"]),
     2: ("Zero Hunger", ["hunger", "food security", "nutrition", "food waste", "agriculture"]),
