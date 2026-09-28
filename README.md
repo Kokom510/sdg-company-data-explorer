@@ -1,6 +1,6 @@
-# SDG Company Data Explorer
+# SDG Impact Scorecard
 
-Streamlit Community Cloud-ready prototype for collecting public company sustainability/ESG information from the internet and mapping evidence to the 17 UN Sustainable Development Goals.
+SDG Sector Impact Scoring Model to assess a potential or existing investment company's contribution to the UN Sustainable Development Goals (SDGs), scored against the sector-relevant targets and indicators of a chosen framework.
 
 ## Streamlit Cloud entrypoint
 
