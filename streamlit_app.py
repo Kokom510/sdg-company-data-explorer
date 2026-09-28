@@ -76,8 +76,8 @@ def score_sdgs(text):
         evidence[n] = [x[0] for x in sorted(hits, key=lambda z: z[1], reverse=True)[:4]]
     return scores, evidence
 
-st.title("🌍 SDG Company Data Explorer")
-st.caption("Internet-assisted prototype for collecting company sustainability disclosures and mapping them to the UN Sustainable Development Goals.")
+st.title("🌍 SDG Impact Scorecard")
+st.caption("SDG Sector Impact Scoring Model to assess a potential or existing investment company's contribution to the UN Sustainable Development Goals (SDGs), scored against the sector-relevant targets and indicators of a chosen framework.")
 
 with st.sidebar:
     st.header("Company")
