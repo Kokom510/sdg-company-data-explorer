@@ -1688,10 +1688,5 @@ used in an ESG or investment workflow.
 
     st.markdown()
        
-### Required packages
 
-Install the required packages from your terminal:
-
-```text
-pip install streamlit requests beautifulsoup4 pypdf pandas
 
