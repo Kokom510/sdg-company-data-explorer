@@ -1686,7 +1686,7 @@ used in an ESG or investment workflow.
 
     st.divider()
 
-    st.markdown(
+    st.markdown()
       
 ### Required packages
 
