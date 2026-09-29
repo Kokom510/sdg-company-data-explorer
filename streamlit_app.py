@@ -1687,10 +1687,11 @@ used in an ESG or investment workflow.
     st.divider()
 
     st.markdown()
-      
+        """
 ### Required packages
-Run:
 
-```bash
+Install the required packages from your terminal:
+
+```text
 pip install streamlit requests beautifulsoup4 pypdf pandas
 
