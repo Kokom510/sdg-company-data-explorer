@@ -1690,7 +1690,4 @@ used in an ESG or investment workflow.
       
 ### Required packages
 
-Run:
 
-```bash
-pip install streamlit requests beautifulsoup4 pypdf pandas
