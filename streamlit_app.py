@@ -1,4 +1,3 @@
-
 import re
 import requests
 import streamlit as st
@@ -76,14 +75,14 @@ def score_sdgs(text):
         evidence[n] = [x[0] for x in sorted(hits, key=lambda z: z[1], reverse=True)[:4]]
     return scores, evidence
 
-st.title("🌍 SDG Impact Scorecard")
-st.caption("SDG Sector Impact Scoring Model to assess a potential or existing investment company's contribution to the UN Sustainable Development Goals (SDGs), scored against the sector-relevant targets and indicators of a chosen framework.")
+st.title("🌍 SDG Company Data Explorer")
+st.caption("Internet-assisted prototype for collecting company sustainability disclosures and mapping them to the UN Sustainable Development Goals.")
 
 with st.sidebar:
     st.header("Company")
     company = st.text_input("Company name", "Nedbank")
     n = st.slider("Web results to collect", 3, 12, 8)
-    run = st.button("Enter", type="primary")
+    run = st.button("Collect SDG data", type="primary")
     st.divider()
     st.markdown("**Important:** Scores are a transparent keyword-based research proxy, not an official SDG rating. Validate evidence before using it for investment, reporting or client decisions.")
 
@@ -153,4 +152,3 @@ For a serious investment/ESG workflow, replace the keyword score with a **sector
 5. Calculate scores consistently across companies.
 6. Add an analyst review/override and an audit trail.
 """)
-
