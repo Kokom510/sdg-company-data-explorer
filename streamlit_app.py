@@ -1,8 +1,9 @@
+```python
 import re
 import requests
 import streamlit as st
 from bs4 import BeautifulSoup
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from datetime import datetime
 
 
@@ -22,367 +23,197 @@ st.set_page_config(
 # ============================================================
 
 SDGS = {
-    1: {
-        "name": "No Poverty",
-        "keywords": [
-            "poverty",
-            "living wage",
-            "financial inclusion",
-            "community investment",
-            "economic inclusion"
-        ]
-    },
-
-    2: {
-        "name": "Zero Hunger",
-        "keywords": [
-            "hunger",
-            "food security",
-            "nutrition",
-            "food waste",
-            "agriculture"
-        ]
-    },
-
-    3: {
-        "name": "Good Health and Well-being",
-        "keywords": [
-            "health",
-            "wellbeing",
-            "occupational health",
-            "safety",
-            "mental health"
-        ]
-    },
-
-    4: {
-        "name": "Quality Education",
-        "keywords": [
-            "education",
-            "training",
-            "skills",
-            "scholarship",
-            "literacy",
-            "learnership"
-        ]
-    },
-
-    5: {
-        "name": "Gender Equality",
-        "keywords": [
-            "gender equality",
-            "women",
-            "female leadership",
-            "pay gap",
-            "diversity",
-            "gender"
-        ]
-    },
-
-    6: {
-        "name": "Clean Water and Sanitation",
-        "keywords": [
-            "water",
-            "wastewater",
-            "sanitation",
-            "water efficiency",
-            "water consumption"
-        ]
-    },
-
-    7: {
-        "name": "Affordable and Clean Energy",
-        "keywords": [
-            "renewable energy",
-            "solar",
-            "wind",
-            "clean energy",
-            "energy efficiency",
-            "renewable"
-        ]
-    },
-
-    8: {
-        "name": "Decent Work and Economic Growth",
-        "keywords": [
-            "decent work",
-            "employment",
-            "labour",
-            "human rights",
-            "economic impact",
-            "jobs"
-        ]
-    },
-
-    9: {
-        "name": "Industry, Innovation and Infrastructure",
-        "keywords": [
-            "innovation",
-            "infrastructure",
-            "technology",
-            "research and development",
-            "digital transformation"
-        ]
-    },
-
-    10: {
-        "name": "Reduced Inequalities",
-        "keywords": [
-            "inequality",
-            "inclusion",
-            "access",
-            "underserved",
-            "equal opportunity",
-            "financial inclusion"
-        ]
-    },
-
-    11: {
-        "name": "Sustainable Cities and Communities",
-        "keywords": [
-            "cities",
-            "housing",
-            "transport",
-            "community development",
-            "urban",
-            "sustainable cities"
-        ]
-    },
-
-    12: {
-        "name": "Responsible Consumption and Production",
-        "keywords": [
-            "circular economy",
-            "recycling",
-            "waste",
-            "sustainable sourcing",
-            "resource efficiency",
-            "responsible consumption"
-        ]
-    },
-
-    13: {
-        "name": "Climate Action",
-        "keywords": [
-            "climate",
-            "carbon",
-            "emissions",
-            "net zero",
-            "decarbonisation",
-            "greenhouse gas"
-        ]
-    },
-
-    14: {
-        "name": "Life Below Water",
-        "keywords": [
-            "ocean",
-            "marine",
-            "fisheries",
-            "plastic pollution",
-            "water ecosystems",
-            "marine ecosystem"
-        ]
-    },
-
-    15: {
-        "name": "Life on Land",
-        "keywords": [
-            "biodiversity",
-            "deforestation",
-            "forests",
-            "land",
-            "ecosystems",
-            "nature"
-        ]
-    },
-
-    16: {
-        "name": "Peace, Justice and Strong Institutions",
-        "keywords": [
-            "governance",
-            "ethics",
-            "anti-corruption",
-            "human rights",
-            "compliance",
-            "integrity"
-        ]
-    },
-
-    17: {
-        "name": "Partnerships for the Goals",
-        "keywords": [
-            "partnership",
-            "stakeholder",
-            "collaboration",
-            "sdg",
-            "sustainable development",
-            "partnerships"
-        ]
-    }
+    1: "No Poverty",
+    2: "Zero Hunger",
+    3: "Good Health and Well-being",
+    4: "Quality Education",
+    5: "Gender Equality",
+    6: "Clean Water and Sanitation",
+    7: "Affordable and Clean Energy",
+    8: "Decent Work and Economic Growth",
+    9: "Industry, Innovation and Infrastructure",
+    10: "Reduced Inequalities",
+    11: "Sustainable Cities and Communities",
+    12: "Responsible Consumption and Production",
+    13: "Climate Action",
+    14: "Life Below Water",
+    15: "Life on Land",
+    16: "Peace, Justice and Strong Institutions",
+    17: "Partnerships for the Goals"
 }
 
 
 # ============================================================
-# SECTOR METHODOLOGY
+# SDG IDENTIFICATION TERMS
+#
+# These are used to FIND possible SDG references.
+# They do NOT automatically mean that a company supports
+# the SDG.
 # ============================================================
 
-SECTOR_WEIGHTS = {
+SDG_TERMS = {
 
-    "Banking & Financial Services": {
-        1: 5,
-        2: 2,
-        3: 4,
-        4: 4,
-        5: 5,
-        6: 2,
-        7: 5,
-        8: 5,
-        9: 4,
-        10: 5,
-        11: 3,
-        12: 3,
-        13: 5,
-        14: 1,
-        15: 2,
-        16: 5,
-        17: 4
-    },
+    1: [
+        "SDG 1",
+        "SDG1",
+        "No Poverty",
+        "poverty",
+        "financial inclusion"
+    ],
 
-    "Mining & Metals": {
-        1: 4,
-        2: 2,
-        3: 5,
-        4: 3,
-        5: 3,
-        6: 5,
-        7: 4,
-        8: 5,
-        9: 4,
-        10: 3,
-        11: 3,
-        12: 5,
-        13: 5,
-        14: 4,
-        15: 5,
-        16: 5,
-        17: 3
-    },
+    2: [
+        "SDG 2",
+        "SDG2",
+        "Zero Hunger",
+        "food security",
+        "nutrition"
+    ],
 
-    "Energy & Utilities": {
-        1: 3,
-        2: 2,
-        3: 4,
-        4: 3,
-        5: 3,
-        6: 4,
-        7: 5,
-        8: 5,
-        9: 5,
-        10: 3,
-        11: 4,
-        12: 5,
-        13: 5,
-        14: 3,
-        15: 4,
-        16: 4,
-        17: 4
-    },
+    3: [
+        "SDG 3",
+        "SDG3",
+        "Good Health and Well-being",
+        "health and wellbeing",
+        "occupational health"
+    ],
 
-    "Consumer Goods": {
-        1: 3,
-        2: 4,
-        3: 4,
-        4: 3,
-        5: 4,
-        6: 4,
-        7: 3,
-        8: 5,
-        9: 3,
-        10: 4,
-        11: 3,
-        12: 5,
-        13: 4,
-        14: 4,
-        15: 4,
-        16: 3,
-        17: 3
-    },
+    4: [
+        "SDG 4",
+        "SDG4",
+        "Quality Education",
+        "education",
+        "skills development"
+    ],
 
-    "Technology": {
-        1: 3,
-        2: 2,
-        3: 4,
-        4: 5,
-        5: 5,
-        6: 2,
-        7: 3,
-        8: 5,
-        9: 5,
-        10: 4,
-        11: 3,
-        12: 3,
-        13: 3,
-        14: 1,
-        15: 2,
-        16: 5,
-        17: 4
-    },
+    5: [
+        "SDG 5",
+        "SDG5",
+        "Gender Equality",
+        "gender equality",
+        "women empowerment"
+    ],
 
-    "Real Estate": {
-        1: 3,
-        2: 1,
-        3: 4,
-        4: 3,
-        5: 3,
-        6: 5,
-        7: 5,
-        8: 5,
-        9: 4,
-        10: 3,
-        11: 5,
-        12: 5,
-        13: 5,
-        14: 2,
-        15: 4,
-        16: 4,
-        17: 3
-    },
+    6: [
+        "SDG 6",
+        "SDG6",
+        "Clean Water and Sanitation",
+        "water security",
+        "water management"
+    ],
 
-    "Healthcare": {
-        1: 3,
-        2: 4,
-        3: 5,
-        4: 4,
-        5: 4,
-        6: 4,
-        7: 3,
-        8: 5,
-        9: 5,
-        10: 4,
-        11: 3,
-        12: 3,
-        13: 3,
-        14: 2,
-        15: 2,
-        16: 4,
-        17: 4
-    },
+    7: [
+        "SDG 7",
+        "SDG7",
+        "Affordable and Clean Energy",
+        "clean energy",
+        "renewable energy"
+    ],
 
-    "General / Other": {
-        sdg: 3
-        for sdg in range(1, 18)
-    }
+    8: [
+        "SDG 8",
+        "SDG8",
+        "Decent Work and Economic Growth",
+        "decent work",
+        "employment"
+    ],
+
+    9: [
+        "SDG 9",
+        "SDG9",
+        "Industry, Innovation and Infrastructure",
+        "innovation",
+        "infrastructure"
+    ],
+
+    10: [
+        "SDG 10",
+        "SDG10",
+        "Reduced Inequalities",
+        "inequality",
+        "economic inclusion"
+    ],
+
+    11: [
+        "SDG 11",
+        "SDG11",
+        "Sustainable Cities and Communities",
+        "sustainable cities",
+        "affordable housing"
+    ],
+
+    12: [
+        "SDG 12",
+        "SDG12",
+        "Responsible Consumption and Production",
+        "circular economy",
+        "responsible consumption"
+    ],
+
+    13: [
+        "SDG 13",
+        "SDG13",
+        "Climate Action",
+        "climate action",
+        "net zero",
+        "carbon emissions"
+    ],
+
+    14: [
+        "SDG 14",
+        "SDG14",
+        "Life Below Water",
+        "marine",
+        "ocean"
+    ],
+
+    15: [
+        "SDG 15",
+        "SDG15",
+        "Life on Land",
+        "biodiversity",
+        "nature"
+    ],
+
+    16: [
+        "SDG 16",
+        "SDG16",
+        "Peace, Justice and Strong Institutions",
+        "governance",
+        "anti-corruption"
+    ],
+
+    17: [
+        "SDG 17",
+        "SDG17",
+        "Partnerships for the Goals",
+        "partnerships",
+        "sustainable development partnerships"
+    ]
 }
+
+
+# ============================================================
+# REPORT TYPES
+# ============================================================
+
+REPORT_TYPES = [
+    "Sustainability Report",
+    "ESG Report",
+    "Integrated Report",
+    "Annual Report",
+    "Climate Report",
+    "Society Report",
+    "Sustainability Data Report",
+    "ESG Data Book",
+    "Sustainable Development Report"
+]
 
 
 # ============================================================
 # SEARCH FUNCTION
 # ============================================================
 
-def search_web(company, max_results=8):
-
-    query = f'"{company}" sustainability ESG SDG report'
+def search_web(query, max_results=10):
 
     q = quote_plus(query)
 
@@ -427,11 +258,12 @@ def search_web(company, max_results=8):
 
                 results = []
 
-                # Standard DuckDuckGo results
                 for item in soup.select(".result")[:max_results]:
 
                     link = item.select_one(".result__a")
-                    snippet = item.select_one(".result__snippet")
+                    snippet = item.select_one(
+                        ".result__snippet"
+                    )
 
                     if link:
 
@@ -470,13 +302,68 @@ def search_web(company, max_results=8):
                 last_error = str(e)
 
     raise RuntimeError(
-        "Unable to retrieve web search results. "
-        + str(last_error)
+        "Web search failed. " + str(last_error)
     )
 
 
 # ============================================================
-# PAGE RETRIEVAL
+# FIND CURRENT COMPANY REPORTS
+# ============================================================
+
+def find_company_reports(company, max_results=12):
+
+    current_year = datetime.now().year
+
+    queries = [
+
+        f'"{company}" sustainability report {current_year}',
+
+        f'"{company}" ESG report {current_year}',
+
+        f'"{company}" integrated report {current_year}',
+
+        f'"{company}" annual report {current_year}',
+
+        f'"{company}" sustainability SDG report',
+
+        f'"{company}" sustainability targets ESG'
+
+    ]
+
+    all_results = []
+
+    seen_urls = set()
+
+    for query in queries:
+
+        try:
+
+            results = search_web(
+                query,
+                max_results=6
+            )
+
+            for result in results:
+
+                url = result["url"]
+
+                if url not in seen_urls:
+
+                    seen_urls.add(url)
+
+                    all_results.append(result)
+
+        except Exception:
+            continue
+
+        if len(all_results) >= max_results:
+            break
+
+    return all_results[:max_results]
+
+
+# ============================================================
+# FETCH PAGE
 # ============================================================
 
 def fetch_page(url):
@@ -486,29 +373,41 @@ def fetch_page(url):
         response = requests.get(
             url,
             headers={
-                "User-Agent": "Mozilla/5.0 SDG-Company-Scorecard/2.0"
+                "User-Agent":
+                "Mozilla/5.0 SDG Company Scorecard/2.0"
             },
-            timeout=20
+            timeout=30
         )
 
         response.raise_for_status()
 
-        soup = BeautifulSoup(
-            response.text,
-            "html.parser"
-        )
+        content_type = response.headers.get(
+            "Content-Type",
+            ""
+        ).lower()
 
-        for tag in soup(
-            ["script", "style", "noscript"]
-        ):
-            tag.decompose()
+        # HTML page
+        if "text/html" in content_type:
 
-        text = soup.get_text(
-            " ",
-            strip=True
-        )
+            soup = BeautifulSoup(
+                response.text,
+                "html.parser"
+            )
 
-        return text[:150000]
+            for tag in soup(
+                ["script", "style", "noscript"]
+            ):
+                tag.decompose()
+
+            text = soup.get_text(
+                " ",
+                strip=True
+            )
+
+            return text[:250000]
+
+        # PDF or other document
+        return ""
 
     except Exception:
 
@@ -516,282 +415,484 @@ def fetch_page(url):
 
 
 # ============================================================
-# REPORTING YEAR DETECTION
+# DETECT REPORT YEAR
 # ============================================================
 
-def detect_year(text):
+def detect_report_year(text):
+
+    if not text:
+        return "Unknown"
+
+    current_year = datetime.now().year
 
     years = re.findall(
         r"\b(20[1-2][0-9])\b",
         text
     )
 
-    if not years:
+    valid_years = [
+        int(year)
+        for year in years
+        if int(year) <= current_year
+    ]
+
+    if not valid_years:
         return "Unknown"
 
-    year_counts = {}
-
-    for year in years:
-
-        year_counts[year] = (
-            year_counts.get(year, 0) + 1
-        )
-
-    return max(
-        year_counts,
-        key=year_counts.get
-    )
+    # Prefer the most recent year
+    return str(max(valid_years))
 
 
 # ============================================================
-# EVIDENCE CLASSIFICATION
+# IDENTIFY REPORT TYPE
 # ============================================================
 
-def classify_evidence(text):
+def identify_report_type(title, text):
 
-    low = text.lower()
+    combined = (
+        title + " " + text[:10000]
+    ).lower()
 
-    positive_terms = [
-        "increased",
-        "improved",
-        "reduced",
-        "supported",
-        "invested",
-        "provided",
-        "renewable",
-        "achieved",
-        "target achieved",
-        "progress"
-    ]
+    for report_type in REPORT_TYPES:
 
-    negative_terms = [
-        "increase in emissions",
-        "negative impact",
-        "incident",
-        "spill",
-        "violation",
-        "breach",
-        "controversy",
-        "penalty",
-        "non-compliance"
-    ]
+        if report_type.lower() in combined:
 
-    risk_terms = [
-        "risk",
-        "exposure",
-        "material risk",
-        "potential impact",
-        "transition risk",
-        "physical risk"
-    ]
+            return report_type
 
-    positive_hits = sum(
-        low.count(term)
-        for term in positive_terms
-    )
-
-    negative_hits = sum(
-        low.count(term)
-        for term in negative_terms
-    )
-
-    risk_hits = sum(
-        low.count(term)
-        for term in risk_terms
-    )
-
-    if negative_hits > positive_hits and negative_hits > risk_hits:
-        return "Negative Impact"
-
-    if positive_hits > risk_hits:
-        return "Positive Contribution"
-
-    if risk_hits > 0:
-        return "Risk / Exposure"
-
-    return "Evidence Identified"
+    return "Company disclosure"
 
 
 # ============================================================
-# SDG EVIDENCE EXTRACTION
+# EXTRACT EXPLICIT SDG REFERENCES
 # ============================================================
 
-def extract_sdg_evidence(text, sdg_number):
+def extract_explicit_sdgs(text):
 
     if not text:
-        return []
-
-    low = text.lower()
-
-    keywords = SDGS[sdg_number]["keywords"]
-
-    evidence = []
-
-    for keyword in keywords:
-
-        matches = list(
-            re.finditer(
-                re.escape(keyword.lower()),
-                low
-            )
-        )
-
-        for match in matches[:3]:
-
-            start = max(
-                0,
-                match.start() - 180
-            )
-
-            end = min(
-                len(text),
-                match.end() + 300
-            )
-
-            passage = text[start:end].strip()
-
-            if len(passage) > 40:
-
-                evidence.append({
-                    "keyword": keyword,
-                    "text": passage
-                })
-
-    return evidence[:6]
-
-
-# ============================================================
-# SCORE SDG
-# ============================================================
-
-def calculate_sdg_score(
-    evidence_count,
-    sector_weight,
-    evidence_type
-):
-
-    if evidence_count == 0:
-        base_score = 0
-
-    elif evidence_count == 1:
-        base_score = 30
-
-    elif evidence_count == 2:
-        base_score = 50
-
-    elif evidence_count == 3:
-        base_score = 65
-
-    elif evidence_count == 4:
-        base_score = 75
-
-    elif evidence_count == 5:
-        base_score = 85
-
-    else:
-        base_score = 90
-
-    # Sector materiality adjustment
-    materiality_factor = sector_weight / 5
-
-    score = base_score * materiality_factor
-
-    # Evidence type adjustment
-    if evidence_type == "Positive Contribution":
-        score *= 1.0
-
-    elif evidence_type == "Risk / Exposure":
-        score *= 0.65
-
-    elif evidence_type == "Negative Impact":
-        score *= 0.25
-
-    score = max(
-        0,
-        min(
-            100,
-            round(score)
-        )
-    )
-
-    return score
-
-
-# ============================================================
-# ANALYSE COMPANY
-# ============================================================
-
-def analyse_company(
-    company,
-    sector,
-    analysed_pages
-):
-
-    combined_text = ""
-
-    for page in analysed_pages:
-
-        combined_text += (
-            " "
-            + page["title"]
-            + " "
-            + page["snippet"]
-            + " "
-            + page["page_text"]
-        )
-
-    sector_weights = SECTOR_WEIGHTS[sector]
+        return {}
 
     results = {}
 
-    for sdg_number in SDGS:
+    # --------------------------------------------------------
+    # First look for explicit "SDG X" references.
+    # --------------------------------------------------------
 
-        evidence = extract_sdg_evidence(
-            combined_text,
-            sdg_number
+    explicit_matches = re.findall(
+        r"\bSDG\s*([1-9]|1[0-7])\b",
+        text,
+        flags=re.IGNORECASE
+    )
+
+    for number in explicit_matches:
+
+        sdg = int(number)
+
+        results.setdefault(
+            sdg,
+            {
+                "confidence": "High",
+                "evidence": []
+            }
         )
 
-        if evidence:
+    # --------------------------------------------------------
+    # Look for official SDG names close to commitment language.
+    # --------------------------------------------------------
 
-            evidence_type = classify_evidence(
-                " ".join(
-                    x["text"]
-                    for x in evidence
+    lower_text = text.lower()
+
+    commitment_terms = [
+        "prioritise",
+        "prioritize",
+        "priority",
+        "focus",
+        "aligned with",
+        "support",
+        "supports",
+        "contribute",
+        "contribution",
+        "commitment",
+        "committed to",
+        "target",
+        "targets",
+        "our sdg",
+        "our sustainable development goals",
+        "material sdg"
+    ]
+
+    for sdg, terms in SDG_TERMS.items():
+
+        for term in terms:
+
+            start_position = 0
+
+            while True:
+
+                position = lower_text.find(
+                    term.lower(),
+                    start_position
                 )
-            )
 
-        else:
+                if position == -1:
+                    break
 
-            evidence_type = "No Evidence"
+                start = max(
+                    0,
+                    position - 350
+                )
 
-        score = calculate_sdg_score(
-            len(evidence),
-            sector_weights[sdg_number],
-            evidence_type
-        )
+                end = min(
+                    len(text),
+                    position + 500
+                )
 
-        results[sdg_number] = {
+                passage = text[
+                    start:end
+                ].strip()
 
-            "score": score,
+                passage_lower = passage.lower()
 
-            "evidence_count": len(
-                evidence
-            ),
+                has_commitment_language = any(
+                    commitment in passage_lower
+                    for commitment in commitment_terms
+                )
 
-            "evidence_type": evidence_type,
+                if has_commitment_language:
 
-            "evidence": evidence,
+                    results.setdefault(
+                        sdg,
+                        {
+                            "confidence": "Medium",
+                            "evidence": []
+                        }
+                    )
 
-            "materiality": sector_weights[
-                sdg_number
-            ]
-        }
+                    if passage not in results[
+                        sdg
+                    ]["evidence"]:
+
+                        results[
+                            sdg
+                        ]["evidence"].append(
+                            passage
+                        )
+
+                start_position = (
+                    position + len(term)
+                )
 
     return results
 
 
 # ============================================================
-# APP HEADER
+# EXTRACT TARGETS
+# ============================================================
+
+def extract_targets(text, sdg_number):
+
+    if not text:
+        return []
+
+    terms = SDG_TERMS[
+        sdg_number
+    ]
+
+    target_indicators = [
+        "target",
+        "targets",
+        "commit",
+        "committed",
+        "aim",
+        "aims",
+        "goal",
+        "by 2030",
+        "by 2050",
+        "by 2025",
+        "by 2026",
+        "by 2027",
+        "by 2028",
+        "by 2029",
+        "by 2030",
+        "reduce",
+        "increase",
+        "reach",
+        "achieve",
+        "achieve",
+        "net zero"
+    ]
+
+    lower_text = text.lower()
+
+    targets = []
+
+    for term in terms:
+
+        positions = [
+            match.start()
+            for match in re.finditer(
+                re.escape(term.lower()),
+                lower_text
+            )
+        ]
+
+        for position in positions[:20]:
+
+            start = max(
+                0,
+                position - 500
+            )
+
+            end = min(
+                len(text),
+                position + 900
+            )
+
+            passage = text[
+                start:end
+            ].strip()
+
+            passage_lower = passage.lower()
+
+            # Only keep passages that look like
+            # actual target/commitment statements.
+            if any(
+                indicator in passage_lower
+                for indicator in target_indicators
+            ):
+
+                # Clean excessive whitespace
+                passage = re.sub(
+                    r"\s+",
+                    " ",
+                    passage
+                )
+
+                if passage not in targets:
+
+                    targets.append(
+                        passage
+                    )
+
+    return targets[:8]
+
+
+# ============================================================
+# EXTRACT TARGET YEAR
+# ============================================================
+
+def extract_target_year(text):
+
+    if not text:
+        return "Not identified"
+
+    years = re.findall(
+        r"\b20[2-9][0-9]\b",
+        text
+    )
+
+    if not years:
+        return "Not identified"
+
+    # Return years that are likely future/target years
+    unique_years = sorted(
+        set(years)
+    )
+
+    return ", ".join(
+        unique_years[:5]
+    )
+
+
+# ============================================================
+# EXTRACT QUANTITATIVE TARGET
+# ============================================================
+
+def extract_quantitative_target(text):
+
+    if not text:
+        return "Not identified"
+
+    patterns = [
+
+        # Percentages
+        r"\b\d+(?:\.\d+)?\s*%",
+
+        # Monetary values
+        r"\b(?:R|£|\$|€)\s?\d+(?:[.,]\d+)?\s*(?:bn|billion|m|million)?",
+
+        # Numbers followed by units
+        r"\b\d+(?:[.,]\d+)?\s*(?:tonnes|tons|tCO2e|MW|GW|GWh|MWh|employees|people|jobs)\b"
+    ]
+
+    matches = []
+
+    for pattern in patterns:
+
+        found = re.findall(
+            pattern,
+            text,
+            flags=re.IGNORECASE
+        )
+
+        matches.extend(found)
+
+    if not matches:
+        return "Not identified"
+
+    return ", ".join(
+        list(dict.fromkeys(matches))[:10]
+    )
+
+
+# ============================================================
+# BUILD COMPANY SDG PROFILE
+# ============================================================
+
+def build_sdg_profile(
+    company,
+    reports
+):
+
+    profile = {}
+
+    for report in reports:
+
+        text = report.get(
+            "page_text",
+            ""
+        )
+
+        if not text:
+            continue
+
+        explicit_sdgs = extract_explicit_sdgs(
+            text
+        )
+
+        for sdg_number, data in explicit_sdgs.items():
+
+            if sdg_number not in profile:
+
+                profile[sdg_number] = {
+                    "sdg": sdg_number,
+                    "name": SDGS[
+                        sdg_number
+                    ],
+                    "confidence":
+                        data["confidence"],
+                    "evidence": [],
+                    "targets": [],
+                    "target_year":
+                        "Not identified",
+                    "quantitative_target":
+                        "Not identified",
+                    "sources": []
+                }
+
+            # Evidence
+            for evidence in data[
+                "evidence"
+            ]:
+
+                if evidence not in profile[
+                    sdg_number
+                ]["evidence"]:
+
+                    profile[
+                        sdg_number
+                    ]["evidence"].append(
+                        evidence
+                    )
+
+            # Targets
+            targets = extract_targets(
+                text,
+                sdg_number
+            )
+
+            for target in targets:
+
+                if target not in profile[
+                    sdg_number
+                ]["targets"]:
+
+                    profile[
+                        sdg_number
+                    ]["targets"].append(
+                        target
+                    )
+
+            # Target year
+            target_year = extract_target_year(
+                " ".join(
+                    profile[
+                        sdg_number
+                    ]["targets"]
+                )
+            )
+
+            if target_year != "Not identified":
+
+                profile[
+                    sdg_number
+                ]["target_year"] = target_year
+
+            # Quantitative target
+            quantitative_target = (
+                extract_quantitative_target(
+                    " ".join(
+                        profile[
+                            sdg_number
+                        ]["targets"]
+                    )
+                )
+            )
+
+            if (
+                quantitative_target
+                != "Not identified"
+            ):
+
+                profile[
+                    sdg_number
+                ]["quantitative_target"] = (
+                    quantitative_target
+                )
+
+            # Source
+            source = {
+                "title":
+                    report["title"],
+
+                "url":
+                    report["url"],
+
+                "year":
+                    report[
+                        "reporting_year"
+                    ],
+
+                "report_type":
+                    report[
+                        "report_type"
+                    ]
+            }
+
+            if source not in profile[
+                sdg_number
+            ]["sources"]:
+
+                profile[
+                    sdg_number
+                ]["sources"].append(
+                    source
+                )
+
+    return profile
+
+
+# ============================================================
+# HEADER
 # ============================================================
 
 st.title(
@@ -799,8 +900,8 @@ st.title(
 )
 
 st.caption(
-    "Version 2 — sector-based research prototype "
-    "for analysing public company sustainability disclosures."
+    "Version 2 — identifies the SDGs a company "
+    "explicitly prioritises and extracts its disclosed targets."
 )
 
 
@@ -810,29 +911,24 @@ st.caption(
 
 with st.sidebar:
 
-    st.header("Company")
+    st.header(
+        "Company"
+    )
 
     company = st.text_input(
         "Company name",
         "Nedbank"
     )
 
-    sector = st.selectbox(
-        "Company sector",
-        list(
-            SECTOR_WEIGHTS.keys()
-        )
-    )
-
-    n = st.slider(
-        "Web results to collect",
-        3,
-        12,
-        8
+    max_reports = st.slider(
+        "Reports / sources to collect",
+        4,
+        15,
+        10
     )
 
     run = st.button(
-        "Collect SDG data",
+        "Research company",
         type="primary"
     )
 
@@ -840,44 +936,50 @@ with st.sidebar:
 
     st.markdown(
         """
-        **Methodology**
+        ### Methodology
 
-        The scorecard considers:
+        The application:
 
-        - Sector materiality
-        - Public sustainability evidence
-        - Evidence volume
-        - Evidence direction
-        - Reporting year
-        - Source transparency
+        1. Searches for current company reports.
+        2. Identifies explicit SDG references.
+        3. Looks for company commitments.
+        4. Extracts targets.
+        5. Identifies target years.
+        6. Shows the original source.
 
-        Scores are a research prototype and
-        should be reviewed by an analyst before
-        being used for investment, reporting or
-        client decisions.
+        An SDG is **not** treated as a company priority
+        simply because an unrelated keyword appears.
         """
     )
 
 
 # ============================================================
-# RUN ANALYSIS
+# RUN
 # ============================================================
 
 if run:
 
-    with st.spinner(
-        "Searching public disclosures and analysing SDG evidence..."
-    ):
+    if not company.strip():
 
-        # ----------------------------------------------------
-        # SEARCH
-        # ----------------------------------------------------
+        st.warning(
+            "Please enter a company name."
+        )
+
+        st.stop()
+
+    # --------------------------------------------------------
+    # SEARCH
+    # --------------------------------------------------------
+
+    with st.spinner(
+        "Searching for the company's latest sustainability and ESG reports..."
+    ):
 
         try:
 
-            results = search_web(
+            report_results = find_company_reports(
                 company,
-                n
+                max_reports
             )
 
         except Exception as e:
@@ -896,53 +998,70 @@ if run:
 
             st.stop()
 
-        if not results:
+    if not report_results:
 
-            st.warning(
-                "No search results were returned."
-            )
+        st.warning(
+            "No company reports were found."
+        )
 
-            st.stop()
+        st.stop()
 
-        # ----------------------------------------------------
-        # FETCH SOURCES
-        # ----------------------------------------------------
 
-        analysed = []
+    # --------------------------------------------------------
+    # FETCH REPORTS
+    # --------------------------------------------------------
 
-        progress = st.progress(0)
+    analysed_reports = []
 
-        for i, item in enumerate(results):
+    progress = st.progress(0)
 
-            page_text = fetch_page(
-                item["url"]
-            )
+    for i, result in enumerate(
+        report_results
+    ):
 
-            analysed.append({
+        text = fetch_page(
+            result["url"]
+        )
 
-                **item,
+        if text:
 
-                "page_text": page_text,
+            analysed_reports.append({
 
-                "reporting_year": detect_year(
-                    page_text
-                )
+                **result,
+
+                "page_text": text,
+
+                "reporting_year":
+                    detect_report_year(
+                        text
+                    ),
+
+                "report_type":
+                    identify_report_type(
+                        result["title"],
+                        text
+                    )
             })
 
-            progress.progress(
-                (i + 1) / len(results)
-            )
+        progress.progress(
+            (i + 1)
+            / len(report_results)
+        )
 
-        progress.empty()
+    progress.empty()
 
-        # ----------------------------------------------------
-        # ANALYSE
-        # ----------------------------------------------------
 
-        sdg_results = analyse_company(
+    # --------------------------------------------------------
+    # BUILD SDG PROFILE
+    # --------------------------------------------------------
+
+    with st.spinner(
+        "Identifying explicitly prioritised SDGs and extracting targets..."
+    ):
+
+        profile = build_sdg_profile(
             company,
-            sector,
-            analysed
+            analysed_reports
         )
 
 
@@ -951,344 +1070,348 @@ if run:
     # ========================================================
 
     st.subheader(
-        f"SDG Profile: {company}"
+        f"{company} — SDG Profile"
     )
 
     st.write(
-        f"**Sector:** {sector}"
+        "The profile below contains only SDGs for which "
+        "the available company disclosures contain an "
+        "explicit SDG reference or commitment-related "
+        "evidence."
     )
 
-    st.write(
-        "The analysis identifies publicly disclosed "
-        "evidence relevant to each SDG and adjusts "
-        "the research score according to sector materiality."
+    st.metric(
+        "Explicitly identified SDGs",
+        len(profile)
     )
 
 
     # ========================================================
-    # OVERALL SCORE
+    # NO SDGS FOUND
     # ========================================================
 
-    weighted_scores = []
+    if not profile:
 
-    total_weight = 0
-
-    for sdg_number, result in sdg_results.items():
-
-        weight = result["materiality"]
-
-        weighted_scores.append(
-            result["score"] * weight
+        st.warning(
+            "No explicit company SDG priorities could be "
+            "identified from the sources collected."
         )
 
-        total_weight += weight
-
-    if total_weight:
-
-        overall_score = round(
-            sum(weighted_scores)
-            / total_weight
+        st.info(
+            "This does not mean the company has no SDG "
+            "activities. It means the available webpages "
+            "did not provide sufficiently explicit evidence."
         )
 
     else:
 
-        overall_score = 0
+        # ====================================================
+        # SDG TABLE
+        # ====================================================
 
+        st.divider()
 
-    st.metric(
-        "Overall SDG Research Score",
-        f"{overall_score}/100"
-    )
+        st.subheader(
+            "Company-identified SDGs"
+        )
 
-    st.caption(
-        "This is a research proxy, not an official "
-        "company ESG or SDG rating."
-    )
+        table_rows = []
 
+        for sdg_number in sorted(
+            profile.keys()
+        ):
 
-    # ========================================================
-    # SDG SCORECARDS
-    # ========================================================
+            item = profile[
+                sdg_number
+            ]
 
-    st.divider()
+            table_rows.append({
 
-    st.subheader(
-        "SDG-by-SDG Assessment"
-    )
+                "SDG":
+                    f"SDG {sdg_number}",
 
-    cols = st.columns(3)
+                "SDG Name":
+                    item["name"],
 
-    for i, (
-        sdg_number,
-        sdg_info
-    ) in enumerate(SDGS.items()):
+                "Evidence confidence":
+                    item["confidence"],
 
-        result = sdg_results[
-            sdg_number
-        ]
-
-        with cols[i % 3]:
-
-            st.markdown(
-                f"### SDG {sdg_number}"
-            )
-
-            st.markdown(
-                f"**{sdg_info['name']}**"
-            )
-
-            st.metric(
-                "Research score",
-                f"{result['score']}/100"
-            )
-
-            st.write(
-                f"**Materiality:** "
-                f"{result['materiality']}/5"
-            )
-
-            st.write(
-                f"**Evidence:** "
-                f"{result['evidence_count']} "
-                f"items"
-            )
-
-            st.write(
-                f"**Assessment:** "
-                f"{result['evidence_type']}"
-            )
-
-            if result["evidence"]:
-
-                with st.expander(
-                    "View evidence"
-                ):
-
-                    for evidence in result[
-                        "evidence"
-                    ]:
-
-                        st.markdown(
-                            f"**Keyword:** "
-                            f"{evidence['keyword']}"
-                        )
-
-                        st.write(
-                            evidence["text"]
-                        )
-
-                        st.divider()
-
-            else:
-
-                st.caption(
-                    "No relevant public evidence identified."
-                )
-
-
-    # ========================================================
-    # DETAILED EVIDENCE TABLE
-    # ========================================================
-
-    st.divider()
-
-    st.subheader(
-        "Evidence Summary"
-    )
-
-    evidence_rows = []
-
-    for sdg_number, result in sdg_results.items():
-
-        if result["evidence"]:
-
-            for evidence in result[
-                "evidence"
-            ][:3]:
-
-                evidence_rows.append({
-
-                    "SDG": (
-                        f"SDG {sdg_number}"
+                "Targets identified":
+                    len(
+                        item["targets"]
                     ),
 
-                    "SDG Name": SDGS[
-                        sdg_number
-                    ]["name"],
+                "Target year":
+                    item["target_year"],
 
-                    "Evidence Type":
-                        result[
-                            "evidence_type"
-                        ],
-
-                    "Materiality":
-                        result[
-                            "materiality"
-                        ],
-
-                    "Keyword":
-                        evidence[
-                            "keyword"
-                        ],
-
-                    "Evidence":
-                        evidence[
-                            "text"
-                        ][:500]
-                })
-
-    if evidence_rows:
+                "Quantitative target":
+                    item[
+                        "quantitative_target"
+                    ]
+            })
 
         st.dataframe(
-            evidence_rows,
+            table_rows,
             use_container_width=True,
             hide_index=True
         )
 
-    else:
 
-        st.info(
-            "No evidence was identified."
+        # ====================================================
+        # DETAILED SDG INFORMATION
+        # ====================================================
+
+        st.divider()
+
+        st.subheader(
+            "SDG Targets and Commitments"
         )
+
+        for sdg_number in sorted(
+            profile.keys()
+        ):
+
+            item = profile[
+                sdg_number
+            ]
+
+            with st.expander(
+                f"SDG {sdg_number} — {item['name']}",
+                expanded=True
+            ):
+
+                st.markdown(
+                    f"### SDG {sdg_number}: "
+                    f"{item['name']}"
+                )
+
+                st.write(
+                    f"**Evidence confidence:** "
+                    f"{item['confidence']}"
+                )
+
+                # ------------------------------------------------
+                # TARGETS
+                # ------------------------------------------------
+
+                st.markdown(
+                    "#### 🎯 Targets / Commitments"
+                )
+
+                if item["targets"]:
+
+                    for target in item[
+                        "targets"
+                    ]:
+
+                        st.markdown(
+                            f"- {target}"
+                        )
+
+                else:
+
+                    st.info(
+                        "No specific target was identified "
+                        "from the available disclosure."
+                    )
+
+
+                # ------------------------------------------------
+                # TARGET YEAR
+                # ------------------------------------------------
+
+                st.markdown(
+                    "#### 📅 Target year"
+                )
+
+                st.write(
+                    item["target_year"]
+                )
+
+
+                # ------------------------------------------------
+                # QUANTITATIVE TARGET
+                # ------------------------------------------------
+
+                st.markdown(
+                    "#### 📊 Quantitative target"
+                )
+
+                st.write(
+                    item[
+                        "quantitative_target"
+                    ]
+                )
+
+
+                # ------------------------------------------------
+                # COMPANY EVIDENCE
+                # ------------------------------------------------
+
+                st.markdown(
+                    "#### 🔎 Company disclosure evidence"
+                )
+
+                if item["evidence"]:
+
+                    for evidence in item[
+                        "evidence"
+                    ][:5]:
+
+                        st.write(
+                            evidence
+                        )
+
+                        st.divider()
+
+                else:
+
+                    st.info(
+                        "No supporting passage was extracted."
+                    )
+
+
+                # ------------------------------------------------
+                # SOURCES
+                # ------------------------------------------------
+
+                st.markdown(
+                    "#### 📚 Sources"
+                )
+
+                for source in item[
+                    "sources"
+                ]:
+
+                    st.markdown(
+                        f"**{source['title']}**"
+                    )
+
+                    st.write(
+                        f"Report type: "
+                        f"{source['report_type']}"
+                    )
+
+                    st.write(
+                        f"Reporting year: "
+                        f"{source['year']}"
+                    )
+
+                    st.link_button(
+                        "Open source",
+                        source["url"]
+                    )
 
 
     # ========================================================
-    # SOURCE INFORMATION
+    # REPORTS FOUND
     # ========================================================
 
     st.divider()
 
     st.subheader(
-        "Internet Sources Collected"
+        "📚 Company Reports Found"
     )
 
-    for item in analysed:
+    for report in analysed_reports:
 
         with st.expander(
-            item["title"]
+            report["title"]
         ):
 
             st.write(
-                f"**Reporting year detected:** "
-                f"{item['reporting_year']}"
+                f"**Report type:** "
+                f"{report['report_type']}"
             )
 
             st.write(
-                item["snippet"]
-                or
-                "No search snippet available."
+                f"**Reporting year:** "
+                f"{report['reporting_year']}"
             )
 
+            if report["snippet"]:
+
+                st.write(
+                    report["snippet"]
+                )
+
             st.link_button(
-                "Open source",
-                item["url"]
+                "Open report / source",
+                report["url"]
             )
 
 
     # ========================================================
-    # ANALYST REVIEW
+    # DATA QUALITY WARNING
     # ========================================================
 
     st.divider()
 
     st.subheader(
-        "👩‍💼 Analyst Review"
+        "⚠️ Data Quality & Analyst Review"
     )
 
-    st.info(
-        "The automated assessment should be reviewed "
-        "before the score is used for investment, "
-        "client or reporting purposes."
+    st.warning(
+        """
+        This application extracts information from publicly
+        accessible webpages. It should not assume that an
+        SDG is a company priority merely because the SDG's
+        terminology appears in a document.
+
+        Analysts should verify:
+
+        • The SDG is explicitly identified by the company.
+        • The target belongs to the company.
+        • The target is current.
+        • The target year is correct.
+        • The metric and baseline are correctly interpreted.
+        • The source is the company's official disclosure.
+        • Any extracted target is not merely a general
+          industry or UN target.
+        """
     )
 
-    review_status = st.selectbox(
-        "Review status",
-        [
-            "Not reviewed",
-            "Reviewed",
-            "Reviewed - requires adjustment"
-        ]
-    )
 
-    analyst_comment = st.text_area(
-        "Analyst comments",
-        placeholder=(
-            "Add supporting evidence, "
-            "adjustments or methodology notes..."
-        )
+    # ========================================================
+    # EXPORT-READY STRUCTURE
+    # ========================================================
+
+    st.divider()
+
+    st.subheader(
+        "📋 Structured Scorecard Fields"
     )
 
     st.write(
-        f"**Review status:** {review_status}"
-    )
-
-    if analyst_comment:
-
-        st.write(
-            f"**Analyst note:** {analyst_comment}"
-        )
-
-
-    # ========================================================
-    # METHODOLOGY
-    # ========================================================
-
-    st.divider()
-
-    st.subheader(
-        "How Version 2 Works"
-    )
-
-    st.markdown(
         """
-### 1. Company identification
+        The information collected by this prototype can
+        eventually be stored using the following structure:
+        """
+    )
 
-The user provides the company and its sector.
-
-### 2. Public disclosure collection
-
-The application searches publicly available information
-for sustainability, ESG and SDG-related disclosures.
-
-### 3. Evidence extraction
-
-Relevant passages are identified using SDG-specific
-evidence terms.
-
-### 4. Sector materiality
-
-Each SDG receives a sector-specific materiality weight.
-
-This means the same evidence can have a different
-materiality depending on the company's industry.
-
-### 5. Evidence classification
-
-Evidence is classified into:
-
-- Positive Contribution
-- Risk / Exposure
-- Negative Impact
-- Evidence Identified
-- No Evidence
-
-### 6. SDG research score
-
-The prototype combines:
-
-**Evidence + sector materiality + evidence direction**
-
-to produce a research score.
-
-### 7. Analyst review
-
-The analyst can review the evidence and record
-comments or adjustments.
-
-The automated score should therefore be treated
-as a starting point for research rather than a
-final ESG judgement.
-"""
+    st.code(
+        """
+Company
+Sector
+SDG
+SDG Name
+Company SDG Priority
+Evidence Confidence
+Target / Commitment
+Target Year
+Baseline
+Current Value
+Target Value
+Unit
+Progress
+Source
+Report Name
+Reporting Year
+Page Reference
+Analyst Review
+Analyst Comment
+        """,
+        language="text"
     )
 
 
@@ -1299,70 +1422,99 @@ final ESG judgement.
 else:
 
     st.info(
-        "Enter a company, select its sector and click "
-        "**Collect SDG data**."
+        "Enter a company and click "
+        "**Research company**."
     )
 
     st.markdown(
         """
-## What Version 2 can do
+## 🌍 What this version does
 
-### 🌍 Analyse all 17 SDGs
+This version is designed around a different question:
 
-The application looks for evidence relevant to
-each of the 17 United Nations Sustainable
-Development Goals.
+> **Which SDGs does the company itself identify as priorities,
+> and what targets has it disclosed against those SDGs?**
 
-### 🏭 Apply sector materiality
+### 1. Finds current company disclosures
 
-Different industries have different sustainability
-impacts and opportunities.
+The application searches for:
 
-The scorecard therefore uses different materiality
-weights for different sectors.
+- Sustainability Reports
+- ESG Reports
+- Integrated Reports
+- Annual Reports
+- Climate Reports
+- Society Reports
+- ESG data books
+- Sustainability data reports
 
-### 📊 Identify evidence
+### 2. Identifies explicit SDGs
 
-The application attempts to identify actual
-disclosure evidence rather than simply counting
-how often a word appears.
+The application looks for explicit references such as:
 
-### ↔️ Distinguish impact types
+**SDG 7**
 
-Evidence can be classified as:
+or
 
-- Positive contribution
-- Negative impact
-- Risk / exposure
-- Evidence identified
-- No evidence
+**Affordable and Clean Energy**
 
-### 📅 Identify reporting years
+combined with company commitment language.
 
-The application attempts to identify the year
-associated with the information collected.
+### 3. Does not score all 17 SDGs
 
-### 🔎 Maintain source transparency
+If a company explicitly identifies only certain SDGs,
+only those SDGs are returned.
 
-The underlying webpages are displayed so an analyst
-can inspect the source information.
+### 4. Extracts targets
 
-### 👩‍💼 Include analyst review
+For each identified SDG, the application attempts to
+extract:
 
-The final assessment should remain subject to
-human review and documented judgement.
+- Target
+- Commitment
+- Target year
+- Quantitative target
+- Supporting evidence
+- Source
+
+### 5. Keeps the source
+
+Every extracted SDG and target should be traceable back
+to the source document or webpage.
 
 ---
 
-## Recommended Version 3
+## Recommended final methodology
 
-For a production ESG / investment workflow, the next
-step would be to move away from keyword-based evidence
-extraction and build a structured methodology around:
+For your actual SDG company scorecard, I would eventually
+structure the data as:
 
-**Company → Sector → SDG → KPI → Metric → Value → Unit → Year → Source → Page → Impact → Score**
+**Company**
+↓
+**Sector**
+↓
+**Company-identified SDGs**
+↓
+**SDG target**
+↓
+**KPI**
+↓
+**Baseline**
+↓
+**Current value**
+↓
+**Target value**
+↓
+**Target year**
+↓
+**Progress**
+↓
+**Analyst assessment**
 
-This would allow the scorecard to use quantitative
-company data rather than relying primarily on text.
+This is preferable to assigning a score simply because
+a sustainability report contains many references to a
+particular SDG.
 """
     )
+```
+
