@@ -1689,5 +1689,8 @@ used in an ESG or investment workflow.
     st.markdown()
       
 ### Required packages
+Run:
 
+```bash
+pip install streamlit requests beautifulsoup4 pypdf pandas
 
