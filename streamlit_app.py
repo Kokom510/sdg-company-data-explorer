@@ -1,25 +1,34 @@
-
 import re
+import io
+import time
+from datetime import datetime
+
 import requests
 import streamlit as st
 from bs4 import BeautifulSoup
 from urllib.parse import quote_plus, urlparse
-from datetime import datetime
+
+# Optional PDF library
+try:
+    from pypdf import PdfReader
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
 
 
 # ============================================================
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # ============================================================
 
 st.set_page_config(
-    page_title="SDG Company Scorecard",
+    page_title="SDG Company Data Explorer",
     page_icon="🌍",
     layout="wide"
 )
 
 
 # ============================================================
-# SDG DEFINITIONS
+# SDG MASTER LIST
 # ============================================================
 
 SDGS = {
@@ -39,344 +48,474 @@ SDGS = {
     14: "Life Below Water",
     15: "Life on Land",
     16: "Peace, Justice and Strong Institutions",
-    17: "Partnerships for the Goals"
+    17: "Partnerships for the Goals",
 }
 
 
 # ============================================================
 # SDG IDENTIFICATION TERMS
 #
-# These are used to FIND possible SDG references.
-# They do NOT automatically mean that a company supports
-# the SDG.
+# These are used to identify explicit SDG references.
+# They are NOT used to score companies.
 # ============================================================
 
-SDG_TERMS = {
-
+SDG_PATTERNS = {
     1: [
-        "SDG 1",
-        "SDG1",
-        "No Poverty",
-        "poverty",
-        "financial inclusion"
+        r"\bsd[gS]\s*1\b",
+        r"\bgoal\s*1\b",
+        r"\bno poverty\b",
     ],
-
     2: [
-        "SDG 2",
-        "SDG2",
-        "Zero Hunger",
-        "food security",
-        "nutrition"
+        r"\bsd[gG]\s*2\b",
+        r"\bgoal\s*2\b",
+        r"\bzero hunger\b",
     ],
-
     3: [
-        "SDG 3",
-        "SDG3",
-        "Good Health and Well-being",
-        "health and wellbeing",
-        "occupational health"
+        r"\bsd[gG]\s*3\b",
+        r"\bgoal\s*3\b",
+        r"\bgood health and well[- ]being\b",
     ],
-
     4: [
-        "SDG 4",
-        "SDG4",
-        "Quality Education",
-        "education",
-        "skills development"
+        r"\bsd[gG]\s*4\b",
+        r"\bgoal\s*4\b",
+        r"\bquality education\b",
     ],
-
     5: [
-        "SDG 5",
-        "SDG5",
-        "Gender Equality",
-        "gender equality",
-        "women empowerment"
+        r"\bsd[gG]\s*5\b",
+        r"\bgoal\s*5\b",
+        r"\bgender equality\b",
     ],
-
     6: [
-        "SDG 6",
-        "SDG6",
-        "Clean Water and Sanitation",
-        "water security",
-        "water management"
+        r"\bsd[gG]\s*6\b",
+        r"\bgoal\s*6\b",
+        r"\bclean water and sanitation\b",
     ],
-
     7: [
-        "SDG 7",
-        "SDG7",
-        "Affordable and Clean Energy",
-        "clean energy",
-        "renewable energy"
+        r"\bsd[gG]\s*7\b",
+        r"\bgoal\s*7\b",
+        r"\baffordable and clean energy\b",
     ],
-
     8: [
-        "SDG 8",
-        "SDG8",
-        "Decent Work and Economic Growth",
-        "decent work",
-        "employment"
+        r"\bsd[gG]\s*8\b",
+        r"\bgoal\s*8\b",
+        r"\bdecent work and economic growth\b",
     ],
-
     9: [
-        "SDG 9",
-        "SDG9",
-        "Industry, Innovation and Infrastructure",
-        "innovation",
-        "infrastructure"
+        r"\bsd[gG]\s*9\b",
+        r"\bgoal\s*9\b",
+        r"\bindustry, innovation and infrastructure\b",
     ],
-
     10: [
-        "SDG 10",
-        "SDG10",
-        "Reduced Inequalities",
-        "inequality",
-        "economic inclusion"
+        r"\bsd[gG]\s*10\b",
+        r"\bgoal\s*10\b",
+        r"\breduced inequalities\b",
     ],
-
     11: [
-        "SDG 11",
-        "SDG11",
-        "Sustainable Cities and Communities",
-        "sustainable cities",
-        "affordable housing"
+        r"\bsd[gG]\s*11\b",
+        r"\bgoal\s*11\b",
+        r"\bsustainable cities and communities\b",
     ],
-
     12: [
-        "SDG 12",
-        "SDG12",
-        "Responsible Consumption and Production",
-        "circular economy",
-        "responsible consumption"
+        r"\bsd[gG]\s*12\b",
+        r"\bgoal\s*12\b",
+        r"\bresponsible consumption and production\b",
     ],
-
     13: [
-        "SDG 13",
-        "SDG13",
-        "Climate Action",
-        "climate action",
-        "net zero",
-        "carbon emissions"
+        r"\bsd[gG]\s*13\b",
+        r"\bgoal\s*13\b",
+        r"\bclimate action\b",
     ],
-
     14: [
-        "SDG 14",
-        "SDG14",
-        "Life Below Water",
-        "marine",
-        "ocean"
+        r"\bsd[gG]\s*14\b",
+        r"\bgoal\s*14\b",
+        r"\blife below water\b",
     ],
-
     15: [
-        "SDG 15",
-        "SDG15",
-        "Life on Land",
-        "biodiversity",
-        "nature"
+        r"\bsd[gG]\s*15\b",
+        r"\bgoal\s*15\b",
+        r"\blife on land\b",
     ],
-
     16: [
-        "SDG 16",
-        "SDG16",
-        "Peace, Justice and Strong Institutions",
-        "governance",
-        "anti-corruption"
+        r"\bsd[gG]\s*16\b",
+        r"\bgoal\s*16\b",
+        r"\bpeace, justice and strong institutions\b",
     ],
-
     17: [
-        "SDG 17",
-        "SDG17",
-        "Partnerships for the Goals",
-        "partnerships",
-        "sustainable development partnerships"
-    ]
+        r"\bsd[gG]\s*17\b",
+        r"\bgoal\s*17\b",
+        r"\bpartnerships for the goals\b",
+    ],
 }
 
 
 # ============================================================
-# REPORT TYPES
+# LANGUAGE THAT INDICATES EXPLICIT COMPANY SUPPORT
+#
+# This is extremely important.
+#
+# A report mentioning "SDG 13" is NOT enough.
+# We look for language suggesting that the company has
+# identified, prioritised, aligned with or reported against it.
 # ============================================================
 
-REPORT_TYPES = [
-    "Sustainability Report",
-    "ESG Report",
-    "Integrated Report",
-    "Annual Report",
-    "Climate Report",
-    "Society Report",
-    "Sustainability Data Report",
-    "ESG Data Book",
-    "Sustainable Development Report"
+EXPLICIT_PRIORITY_TERMS = [
+    "priority sdg",
+    "priority sdgs",
+    "prioritised sdg",
+    "prioritised sdgs",
+    "prioritized sdg",
+    "prioritized sdgs",
+    "our sdgs",
+    "our priority",
+    "our priorities",
+    "focus sdg",
+    "focus sdgs",
+    "focus areas",
+    "key sdgs",
+    "relevant sdgs",
+    "identified sdgs",
+    "selected sdgs",
+    "strategic sdgs",
+    "aligned with the sdgs",
+    "aligned to the sdgs",
+    "aligned with sdg",
+    "aligned to sdg",
+    "support the sdgs",
+    "support sdg",
+    "contribute to the sdgs",
+    "contribute to sdg",
+    "contribution to the sdgs",
+    "contribution to sdg",
+    "commitment to the sdgs",
+    "commitment to sdg",
+    "mapped to the sdgs",
+    "mapped to sdg",
+    "linked to the sdgs",
+    "linked to sdg",
+    "sdg alignment",
+    "sdg contribution",
+    "sustainable development goals",
 ]
 
 
 # ============================================================
-# SEARCH FUNCTION
+# TARGET TERMS
 # ============================================================
 
-def search_web(query, max_results=10):
+TARGET_TERMS = [
+    "target",
+    "targets",
+    "commitment",
+    "commitments",
+    "ambition",
+    "ambitions",
+    "goal",
+    "goals",
+    "by 2025",
+    "by 2026",
+    "by 2027",
+    "by 2028",
+    "by 2029",
+    "by 2030",
+    "by 2035",
+    "by 2040",
+    "by 2050",
+    "net zero",
+    "reduce",
+    "reduction",
+    "increase",
+    "achieve",
+    "achieving",
+    "reach",
+    "reaching",
+    "maintain",
+    "eliminate",
+]
 
-    q = quote_plus(query)
+
+# ============================================================
+# HTTP SESSION
+# ============================================================
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 Chrome/150 Safari/537.36 "
+        "SDG-Company-Data-Explorer/3.0"
+    )
+}
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def clean_text(text):
+    """Clean excessive whitespace."""
+    if not text:
+        return ""
+
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def normalise_company(company):
+    """Basic company-name cleaning."""
+    company = company.strip()
+    company = re.sub(
+        r"\b(limited|ltd|plc|inc|incorporated|corp|corporation)\b",
+        "",
+        company,
+        flags=re.IGNORECASE
+    )
+    return clean_text(company)
+
+
+def is_pdf_url(url):
+    return ".pdf" in url.lower()
+
+
+def get_domain(url):
+    try:
+        return urlparse(url).netloc.lower().replace("www.", "")
+    except Exception:
+        return ""
+
+
+def looks_like_company_domain(url, company):
+    """
+    Heuristic only.
+
+    We don't assume that every search result is official.
+    """
+    domain = get_domain(url)
+
+    if not domain:
+        return False
+
+    company_words = re.findall(
+        r"[a-z0-9]+",
+        normalise_company(company).lower()
+    )
+
+    if not company_words:
+        return False
+
+    return any(
+        word in domain
+        for word in company_words
+        if len(word) > 3
+    )
+
+
+# ============================================================
+# SEARCH
+# ============================================================
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def search_web(query, max_results=8):
+    """
+    Search DuckDuckGo.
+
+    Cached for 1 hour so repeated searches are faster.
+    """
 
     endpoints = [
-        f"https://html.duckduckgo.com/html/?q={q}",
-        f"https://lite.duckduckgo.com/lite/?q={q}"
+        "https://html.duckduckgo.com/html/",
+        "https://lite.duckduckgo.com/lite/",
     ]
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/150.0 Safari/537.36"
-        ),
-        "Accept": (
-            "text/html,application/xhtml+xml,"
-            "application/xml;q=0.9,*/*;q=0.8"
-        ),
-        "Accept-Language": "en-US,en;q=0.9"
-    }
 
     last_error = None
 
     for endpoint in endpoints:
 
-        for attempt in range(2):
+        try:
+            response = requests.get(
+                endpoint,
+                params={"q": query},
+                headers=HEADERS,
+                timeout=8
+            )
 
-            try:
+            response.raise_for_status()
 
-                response = requests.get(
-                    endpoint,
-                    headers=headers,
-                    timeout=30
+            soup = BeautifulSoup(
+                response.text,
+                "html.parser"
+            )
+
+            results = []
+
+            # Standard DuckDuckGo results
+            selectors = [
+                ".result",
+                ".result-link",
+                ".result__body"
+            ]
+
+            found = []
+
+            for selector in selectors:
+                found = soup.select(selector)
+                if found:
+                    break
+
+            for item in found:
+
+                link = (
+                    item.select_one(".result__a")
+                    or item.select_one("a.result-link")
+                    or item.select_one("a")
                 )
 
-                response.raise_for_status()
+                if not link:
+                    continue
 
-                soup = BeautifulSoup(
-                    response.text,
-                    "html.parser"
+                url = link.get("href", "")
+
+                title = clean_text(
+                    link.get_text(" ", strip=True)
                 )
 
-                results = []
+                snippet_element = (
+                    item.select_one(".result__snippet")
+                    or item.select_one(".result-snippet")
+                )
 
-                for item in soup.select(".result")[:max_results]:
-
-                    link = item.select_one(".result__a")
-                    snippet = item.select_one(
-                        ".result__snippet"
+                snippet = (
+                    clean_text(
+                        snippet_element.get_text(
+                            " ",
+                            strip=True
+                        )
                     )
-
-                    if link:
-
-                        results.append({
-                            "title": link.get_text(
-                                " ",
-                                strip=True
-                            ),
-
-                            "url": link.get(
-                                "href",
-                                ""
-                            ),
-
-                            "snippet": (
-                                snippet.get_text(
-                                    " ",
-                                    strip=True
-                                )
-                                if snippet else ""
-                            )
-                        })
-
-                if results:
-                    return results
-
-            except requests.exceptions.Timeout:
-
-                last_error = (
-                    f"Search timed out on attempt "
-                    f"{attempt + 1}"
+                    if snippet_element
+                    else ""
                 )
 
-            except requests.exceptions.RequestException as e:
+                if url and title:
 
-                last_error = str(e)
+                    results.append({
+                        "title": title,
+                        "url": url,
+                        "snippet": snippet
+                    })
 
-    raise RuntimeError(
-        "Web search failed. " + str(last_error)
-    )
+            if results:
+                return results[:max_results]
+
+        except Exception as e:
+            last_error = e
+
+    return []
 
 
 # ============================================================
-# FIND CURRENT COMPANY REPORTS
+# FIND LATEST COMPANY REPORTS
 # ============================================================
 
-def find_company_reports(company, max_results=12):
+def find_latest_reports(company, max_results=8):
 
     current_year = datetime.now().year
 
     queries = [
-
-        f'"{company}" sustainability report {current_year}',
-
-        f'"{company}" ESG report {current_year}',
-
-        f'"{company}" integrated report {current_year}',
-
-        f'"{company}" annual report {current_year}',
-
-        f'"{company}" sustainability SDG report',
-
-        f'"{company}" sustainability targets ESG'
-
+        f'"{company}" sustainability report {current_year} PDF',
+        f'"{company}" ESG report {current_year} PDF',
+        f'"{company}" integrated report {current_year} PDF',
+        f'"{company}" sustainability report {current_year - 1} PDF',
+        f'"{company}" ESG report {current_year - 1} PDF',
+        f'"{company}" SDG report PDF',
     ]
 
     all_results = []
-
     seen_urls = set()
 
     for query in queries:
 
-        try:
+        results = search_web(
+            query,
+            max_results=5
+        )
 
-            results = search_web(
-                query,
-                max_results=6
+        for result in results:
+
+            url = result["url"]
+
+            if not url:
+                continue
+
+            if url in seen_urls:
+                continue
+
+            seen_urls.add(url)
+
+            title_lower = result["title"].lower()
+
+            relevance = 0
+
+            if "sustainability" in title_lower:
+                relevance += 5
+
+            if "esg" in title_lower:
+                relevance += 5
+
+            if "integrated report" in title_lower:
+                relevance += 4
+
+            if "annual report" in title_lower:
+                relevance += 2
+
+            if is_pdf_url(url):
+                relevance += 5
+
+            if looks_like_company_domain(url, company):
+                relevance += 8
+
+            year_match = re.search(
+                r"\b(20\d{2})\b",
+                result["title"]
             )
 
-            for result in results:
+            year = (
+                int(year_match.group(1))
+                if year_match
+                else 0
+            )
 
-                url = result["url"]
+            result["relevance"] = relevance
+            result["year"] = year
 
-                if url not in seen_urls:
+            all_results.append(result)
 
-                    seen_urls.add(url)
-
-                    all_results.append(result)
-
-        except Exception:
-            continue
-
-        if len(all_results) >= max_results:
-            break
+    # Highest relevance first, then latest year
+    all_results.sort(
+        key=lambda x: (
+            x["relevance"],
+            x["year"]
+        ),
+        reverse=True
+    )
 
     return all_results[:max_results]
 
 
 # ============================================================
-# FETCH PAGE
+# DOWNLOAD PDF
 # ============================================================
 
-def fetch_page(url):
+@st.cache_data(
+    ttl=86400,
+    show_spinner=False,
+    max_entries=50
+)
+def download_pdf(url):
 
     try:
 
         response = requests.get(
             url,
-            headers={
-                "User-Agent":
-                "Mozilla/5.0 SDG Company Scorecard/2.0"
-            },
-            timeout=30
+            headers=HEADERS,
+            timeout=15
         )
 
         response.raise_for_status()
@@ -386,522 +525,696 @@ def fetch_page(url):
             ""
         ).lower()
 
-        # HTML page
-        if "text/html" in content_type:
+        # Accept PDF URL even if server doesn't return
+        # a perfect content-type.
+        if (
+            "pdf" not in content_type
+            and not is_pdf_url(url)
+        ):
+            return None
 
-            soup = BeautifulSoup(
-                response.text,
-                "html.parser"
-            )
-
-            for tag in soup(
-                ["script", "style", "noscript"]
-            ):
-                tag.decompose()
-
-            text = soup.get_text(
-                " ",
-                strip=True
-            )
-
-            return text[:250000]
-
-        # PDF or other document
-        return ""
+        return response.content
 
     except Exception:
-
-        return ""
+        return None
 
 
 # ============================================================
-# DETECT REPORT YEAR
+# EXTRACT PDF TEXT
 # ============================================================
 
-def detect_report_year(text):
+def extract_pdf_pages(pdf_bytes):
 
-    if not text:
-        return "Unknown"
+    if not PDF_AVAILABLE:
+        return []
 
-    current_year = datetime.now().year
+    if not pdf_bytes:
+        return []
 
-    years = re.findall(
-        r"\b(20[1-2][0-9])\b",
+    try:
+
+        reader = PdfReader(
+            io.BytesIO(pdf_bytes)
+        )
+
+        pages = []
+
+        for page_number, page in enumerate(
+            reader.pages,
+            start=1
+        ):
+
+            try:
+                text = page.extract_text() or ""
+            except Exception:
+                text = ""
+
+            text = clean_text(text)
+
+            if text:
+                pages.append({
+                    "page": page_number,
+                    "text": text
+                })
+
+        return pages
+
+    except Exception:
+        return []
+
+
+# ============================================================
+# HTML FALLBACK
+# ============================================================
+
+@st.cache_data(
+    ttl=86400,
+    show_spinner=False,
+    max_entries=50
+)
+def fetch_html(url):
+
+    try:
+
+        response = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=10
+        )
+
+        response.raise_for_status()
+
+        soup = BeautifulSoup(
+            response.text,
+            "html.parser"
+        )
+
+        for tag in soup(
+            ["script", "style", "noscript"]
+        ):
+            tag.decompose()
+
+        text = soup.get_text(
+            " ",
+            strip=True
+        )
+
+        return [{
+            "page": None,
+            "text": clean_text(text)
+        }]
+
+    except Exception:
+        return []
+
+
+# ============================================================
+# GET DOCUMENT PAGES
+# ============================================================
+
+def get_document_pages(url):
+
+    if is_pdf_url(url):
+
+        pdf_bytes = download_pdf(url)
+
+        if pdf_bytes:
+            return extract_pdf_pages(
+                pdf_bytes
+            )
+
+    return fetch_html(url)
+
+
+# ============================================================
+# SDG DETECTION
+# ============================================================
+
+def detect_sdgs_in_text(text):
+
+    detected = []
+
+    text_lower = text.lower()
+
+    for sdg_number, patterns in SDG_PATTERNS.items():
+
+        for pattern in patterns:
+
+            if re.search(
+                pattern,
+                text_lower,
+                flags=re.IGNORECASE
+            ):
+                detected.append(sdg_number)
+                break
+
+    return sorted(set(detected))
+
+
+# ============================================================
+# SENTENCE SPLITTING
+# ============================================================
+
+def split_sentences(text):
+
+    text = clean_text(text)
+
+    # Basic sentence splitter suitable for report extraction.
+    sentences = re.split(
+        r"(?<=[.!?])\s+",
         text
     )
 
-    valid_years = [
-        int(year)
-        for year in years
-        if int(year) <= current_year
+    return [
+        sentence.strip()
+        for sentence in sentences
+        if len(sentence.strip()) > 20
     ]
 
-    if not valid_years:
-        return "Unknown"
-
-    # Prefer the most recent year
-    return str(max(valid_years))
-
 
 # ============================================================
-# IDENTIFY REPORT TYPE
+# EXPLICIT SDG PRIORITY CHECK
 # ============================================================
 
-def identify_report_type(title, text):
+def sentence_has_priority_language(sentence):
 
-    combined = (
-        title + " " + text[:10000]
-    ).lower()
+    sentence_lower = sentence.lower()
 
-    for report_type in REPORT_TYPES:
-
-        if report_type.lower() in combined:
-
-            return report_type
-
-    return "Company disclosure"
-
-
-# ============================================================
-# EXTRACT EXPLICIT SDG REFERENCES
-# ============================================================
-
-def extract_explicit_sdgs(text):
-
-    if not text:
-        return {}
-
-    results = {}
-
-    # --------------------------------------------------------
-    # First look for explicit "SDG X" references.
-    # --------------------------------------------------------
-
-    explicit_matches = re.findall(
-        r"\bSDG\s*([1-9]|1[0-7])\b",
-        text,
-        flags=re.IGNORECASE
+    return any(
+        term in sentence_lower
+        for term in EXPLICIT_PRIORITY_TERMS
     )
 
-    for number in explicit_matches:
 
-        sdg = int(number)
+def get_sdg_evidence(
+    pages,
+    sdg_number
+):
 
-        results.setdefault(
-            sdg,
-            {
-                "confidence": "High",
-                "evidence": []
-            }
-        )
+    evidence = []
 
-    # --------------------------------------------------------
-    # Look for official SDG names close to commitment language.
-    # --------------------------------------------------------
-
-    lower_text = text.lower()
-
-    commitment_terms = [
-        "prioritise",
-        "prioritize",
-        "priority",
-        "focus",
-        "aligned with",
-        "support",
-        "supports",
-        "contribute",
-        "contribution",
-        "commitment",
-        "committed to",
-        "target",
-        "targets",
-        "our sdg",
-        "our sustainable development goals",
-        "material sdg"
-    ]
-
-    for sdg, terms in SDG_TERMS.items():
-
-        for term in terms:
-
-            start_position = 0
-
-            while True:
-
-                position = lower_text.find(
-                    term.lower(),
-                    start_position
-                )
-
-                if position == -1:
-                    break
-
-                start = max(
-                    0,
-                    position - 350
-                )
-
-                end = min(
-                    len(text),
-                    position + 500
-                )
-
-                passage = text[
-                    start:end
-                ].strip()
-
-                passage_lower = passage.lower()
-
-                has_commitment_language = any(
-                    commitment in passage_lower
-                    for commitment in commitment_terms
-                )
-
-                if has_commitment_language:
-
-                    results.setdefault(
-                        sdg,
-                        {
-                            "confidence": "Medium",
-                            "evidence": []
-                        }
-                    )
-
-                    if passage not in results[
-                        sdg
-                    ]["evidence"]:
-
-                        results[
-                            sdg
-                        ]["evidence"].append(
-                            passage
-                        )
-
-                start_position = (
-                    position + len(term)
-                )
-
-    return results
-
-
-# ============================================================
-# EXTRACT TARGETS
-# ============================================================
-
-def extract_targets(text, sdg_number):
-
-    if not text:
-        return []
-
-    terms = SDG_TERMS[
+    patterns = SDG_PATTERNS[
         sdg_number
     ]
 
-    target_indicators = [
-        "target",
-        "targets",
-        "commit",
-        "committed",
-        "aim",
-        "aims",
-        "goal",
-        "by 2030",
-        "by 2050",
-        "by 2025",
-        "by 2026",
-        "by 2027",
-        "by 2028",
-        "by 2029",
-        "by 2030",
-        "reduce",
-        "increase",
-        "reach",
-        "achieve",
-        "achieve",
-        "net zero"
-    ]
+    for page_data in pages:
 
-    lower_text = text.lower()
+        page_number = page_data["page"]
+        text = page_data["text"]
 
-    targets = []
+        sentences = split_sentences(text)
 
-    for term in terms:
+        for sentence in sentences:
 
-        positions = [
-            match.start()
-            for match in re.finditer(
-                re.escape(term.lower()),
-                lower_text
-            )
-        ]
-
-        for position in positions[:20]:
-
-            start = max(
-                0,
-                position - 500
+            sdg_match = any(
+                re.search(
+                    pattern,
+                    sentence,
+                    flags=re.IGNORECASE
+                )
+                for pattern in patterns
             )
 
-            end = min(
-                len(text),
-                position + 900
-            )
+            if not sdg_match:
+                continue
 
-            passage = text[
-                start:end
-            ].strip()
-
-            passage_lower = passage.lower()
-
-            # Only keep passages that look like
-            # actual target/commitment statements.
-            if any(
-                indicator in passage_lower
-                for indicator in target_indicators
+            # Strong evidence:
+            # SDG reference + priority/support language
+            if sentence_has_priority_language(
+                sentence
             ):
 
-                # Clean excessive whitespace
-                passage = re.sub(
-                    r"\s+",
-                    " ",
-                    passage
-                )
+                evidence.append({
+                    "page": page_number,
+                    "text": sentence,
+                    "confidence": "High"
+                })
 
-                if passage not in targets:
+            else:
 
-                    targets.append(
-                        passage
-                    )
+                # Keep weaker evidence separate.
+                evidence.append({
+                    "page": page_number,
+                    "text": sentence,
+                    "confidence": "Medium"
+                })
 
-    return targets[:8]
+    return evidence
 
 
 # ============================================================
-# EXTRACT TARGET YEAR
+# TARGET EXTRACTION
+# ============================================================
+
+def looks_like_target(sentence):
+
+    lower = sentence.lower()
+
+    has_target_language = any(
+        term in lower
+        for term in TARGET_TERMS
+    )
+
+    # Quantitative target patterns
+    has_percentage = bool(
+        re.search(
+            r"\b\d{1,3}(?:\.\d+)?\s?%",
+            sentence
+        )
+    )
+
+    has_year = bool(
+        re.search(
+            r"\b20[2-5]\d\b",
+            sentence
+        )
+    )
+
+    has_number = bool(
+        re.search(
+            r"\b\d+(?:\.\d+)?\b",
+            sentence
+        )
+    )
+
+    return (
+        has_target_language
+        and (
+            has_percentage
+            or has_year
+            or has_number
+        )
+    )
+
+
+def extract_targets_near_sdg(
+    pages,
+    sdg_number
+):
+
+    targets = []
+
+    patterns = SDG_PATTERNS[
+        sdg_number
+    ]
+
+    for page_data in pages:
+
+        page_number = page_data["page"]
+        text = page_data["text"]
+
+        sentences = split_sentences(text)
+
+        for i, sentence in enumerate(
+            sentences
+        ):
+
+            sdg_match = any(
+                re.search(
+                    pattern,
+                    sentence,
+                    flags=re.IGNORECASE
+                )
+                for pattern in patterns
+            )
+
+            if not sdg_match:
+                continue
+
+            # Look at this sentence and the next
+            # two sentences.
+            nearby = sentences[
+                i:min(i + 3, len(sentences))
+            ]
+
+            for candidate in nearby:
+
+                if not looks_like_target(
+                    candidate
+                ):
+                    continue
+
+                targets.append({
+                    "page": page_number,
+                    "text": candidate
+                })
+
+    # Remove duplicates
+    unique = []
+    seen = set()
+
+    for target in targets:
+
+        key = target["text"].lower()
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique.append(target)
+
+    return unique[:10]
+
+
+# ============================================================
+# TARGET YEAR
 # ============================================================
 
 def extract_target_year(text):
 
-    if not text:
-        return "Not identified"
-
     years = re.findall(
-        r"\b20[2-9][0-9]\b",
+        r"\b20(?:2[5-9]|3\d|4\d|50)\b",
         text
     )
 
     if not years:
-        return "Not identified"
+        return ""
 
-    # Return years that are likely future/target years
-    unique_years = sorted(
-        set(years)
-    )
-
-    return ", ".join(
-        unique_years[:5]
+    # Prefer the latest target year mentioned.
+    return max(
+        years,
+        key=int
     )
 
 
 # ============================================================
-# EXTRACT QUANTITATIVE TARGET
+# QUANTITATIVE TARGET
 # ============================================================
 
 def extract_quantitative_target(text):
 
-    if not text:
-        return "Not identified"
-
     patterns = [
 
-        # Percentages
-        r"\b\d+(?:\.\d+)?\s*%",
+        # Percentage
+        r"\b\d{1,3}(?:\.\d+)?\s?%",
 
-        # Monetary values
-        r"\b(?:R|£|\$|€)\s?\d+(?:[.,]\d+)?\s*(?:bn|billion|m|million)?",
+        # Numbers with common units
+        r"\b\d+(?:\.\d+)?\s?(?:tCO2e|tCO₂e|tonnes|tons|MW|GW|MWh|GWh|kWh|kg|litres|liters)\b",
 
-        # Numbers followed by units
-        r"\b\d+(?:[.,]\d+)?\s*(?:tonnes|tons|tCO2e|MW|GW|GWh|MWh|employees|people|jobs)\b"
+        # Net zero year
+        r"\bnet zero\b.*?\b20\d{2}\b",
+
+        # Carbon neutral
+        r"\bcarbon neutral\b.*?\b20\d{2}\b",
     ]
-
-    matches = []
 
     for pattern in patterns:
 
-        found = re.findall(
+        match = re.search(
             pattern,
             text,
             flags=re.IGNORECASE
         )
 
-        matches.extend(found)
+        if match:
+            return clean_text(
+                match.group(0)
+            )
 
-    if not matches:
-        return "Not identified"
-
-    return ", ".join(
-        list(dict.fromkeys(matches))[:10]
-    )
+    return ""
 
 
 # ============================================================
-# BUILD COMPANY SDG PROFILE
+# BUILD SDG PROFILE
 # ============================================================
 
 def build_sdg_profile(
     company,
-    reports
+    report,
+    pages
 ):
 
-    profile = {}
+    profile = []
 
-    for report in reports:
+    for sdg_number in SDGS:
 
-        text = report.get(
-            "page_text",
-            ""
+        evidence = get_sdg_evidence(
+            pages,
+            sdg_number
         )
 
-        if not text:
+        if not evidence:
             continue
 
-        explicit_sdgs = extract_explicit_sdgs(
-            text
+        # We only regard the SDG as a company-supported
+        # SDG when strong explicit language exists.
+        high_confidence = [
+            e for e in evidence
+            if e["confidence"] == "High"
+        ]
+
+        if not high_confidence:
+            continue
+
+        targets = extract_targets_near_sdg(
+            pages,
+            sdg_number
         )
 
-        for sdg_number, data in explicit_sdgs.items():
+        target_text = ""
 
-            if sdg_number not in profile:
+        if targets:
+            target_text = targets[0]["text"]
 
-                profile[sdg_number] = {
-                    "sdg": sdg_number,
-                    "name": SDGS[
-                        sdg_number
-                    ],
-                    "confidence":
-                        data["confidence"],
-                    "evidence": [],
-                    "targets": [],
-                    "target_year":
-                        "Not identified",
-                    "quantitative_target":
-                        "Not identified",
-                    "sources": []
-                }
+        combined_target_text = " ".join(
+            t["text"]
+            for t in targets
+        )
 
-            # Evidence
-            for evidence in data[
-                "evidence"
-            ]:
+        target_year = (
+            extract_target_year(
+                combined_target_text
+            )
+            if combined_target_text
+            else ""
+        )
 
-                if evidence not in profile[
-                    sdg_number
-                ]["evidence"]:
+        quantitative_target = (
+            extract_quantitative_target(
+                combined_target_text
+            )
+            if combined_target_text
+            else ""
+        )
 
-                    profile[
-                        sdg_number
-                    ]["evidence"].append(
-                        evidence
-                    )
+        best_evidence = high_confidence[0]
 
-            # Targets
-            targets = extract_targets(
-                text,
+        profile.append({
+
+            "Company": company,
+
+            "SDG": f"SDG {sdg_number}",
+
+            "SDG Name": SDGS[
                 sdg_number
-            )
+            ],
 
-            for target in targets:
+            "Company SDG Priority": "Explicitly identified",
 
-                if target not in profile[
-                    sdg_number
-                ]["targets"]:
+            "Evidence Confidence": "High",
 
-                    profile[
-                        sdg_number
-                    ]["targets"].append(
-                        target
-                    )
+            "Target / Commitment": target_text,
 
-            # Target year
-            target_year = extract_target_year(
-                " ".join(
-                    profile[
-                        sdg_number
-                    ]["targets"]
-                )
-            )
+            "Target Year": target_year,
 
-            if target_year != "Not identified":
+            "Quantitative Target": quantitative_target,
 
-                profile[
-                    sdg_number
-                ]["target_year"] = target_year
+            "Source": report["url"],
 
-            # Quantitative target
-            quantitative_target = (
-                extract_quantitative_target(
-                    " ".join(
-                        profile[
-                            sdg_number
-                        ]["targets"]
-                    )
-                )
-            )
+            "Report Name": report["title"],
 
-            if (
-                quantitative_target
-                != "Not identified"
-            ):
+            "Reporting Year": report.get(
+                "year",
+                ""
+            ),
 
-                profile[
-                    sdg_number
-                ]["quantitative_target"] = (
-                    quantitative_target
-                )
+            "Page Reference": best_evidence[
+                "page"
+            ],
 
-            # Source
-            source = {
-                "title":
-                    report["title"],
+            "Evidence": best_evidence[
+                "text"
+            ],
 
-                "url":
-                    report["url"],
+            "Analyst Review": "Required",
 
-                "year":
-                    report[
-                        "reporting_year"
-                    ],
-
-                "report_type":
-                    report[
-                        "report_type"
-                    ]
-            }
-
-            if source not in profile[
-                sdg_number
-            ]["sources"]:
-
-                profile[
-                    sdg_number
-                ]["sources"].append(
-                    source
-                )
+            "Analyst Comment": "",
+        })
 
     return profile
 
 
 # ============================================================
-# HEADER
+# FIND BEST REPORT
+# ============================================================
+
+def select_best_report(
+    company,
+    reports
+):
+
+    if not reports:
+        return None
+
+    current_year = datetime.now().year
+
+    scored = []
+
+    for report in reports:
+
+        score = report.get(
+            "relevance",
+            0
+        )
+
+        title = report[
+            "title"
+        ].lower()
+
+        url = report[
+            "url"
+        ]
+
+        year = report.get(
+            "year",
+            0
+        )
+
+        # Strong preference for official-looking source
+        if looks_like_company_domain(
+            url,
+            company
+        ):
+            score += 20
+
+        # Prefer PDFs
+        if is_pdf_url(url):
+            score += 10
+
+        # Prefer sustainability/ESG reports
+        if "sustainability" in title:
+            score += 10
+
+        if "esg" in title:
+            score += 8
+
+        if "integrated report" in title:
+            score += 6
+
+        # Prefer latest available year,
+        # but don't require current year.
+        if year:
+            year_distance = max(
+                0,
+                current_year - year
+            )
+
+            score += max(
+                0,
+                15 - year_distance * 3
+            )
+
+        report_copy = dict(report)
+        report_copy[
+            "final_score"
+        ] = score
+
+        scored.append(
+            report_copy
+        )
+
+    scored.sort(
+        key=lambda x: (
+            x["final_score"],
+            x.get("year", 0)
+        ),
+        reverse=True
+    )
+
+    return scored[0]
+
+
+# ============================================================
+# MAIN COLLECTION FUNCTION
+# ============================================================
+
+@st.cache_data(
+    ttl=3600,
+    show_spinner=False
+)
+def collect_company_data(company):
+
+    company = normalise_company(
+        company
+    )
+
+    reports = find_latest_reports(
+        company,
+        max_results=8
+    )
+
+    if not reports:
+        return {
+            "reports": [],
+            "selected_report": None,
+            "profile": [],
+            "error": "No reports found."
+        }
+
+    selected_report = select_best_report(
+        company,
+        reports
+    )
+
+    if not selected_report:
+        return {
+            "reports": reports,
+            "selected_report": None,
+            "profile": [],
+            "error": "Could not select a report."
+        }
+
+    pages = get_document_pages(
+        selected_report["url"]
+    )
+
+    if not pages:
+        return {
+            "reports": reports,
+            "selected_report": selected_report,
+            "profile": [],
+            "error": (
+                "The report was found but its contents "
+                "could not be extracted."
+            )
+        }
+
+    profile = build_sdg_profile(
+        company,
+        selected_report,
+        pages
+    )
+
+    return {
+        "reports": reports,
+        "selected_report": selected_report,
+        "profile": profile,
+        "error": ""
+    }
+
+
+# ============================================================
+# UI
 # ============================================================
 
 st.title(
-    "🌍 SDG Company Scorecard"
+    "🌍 SDG Company Data Explorer — Version 3"
 )
 
 st.caption(
-    "Version 2 — identifies the SDGs a company "
-    "explicitly prioritises and extracts its disclosed targets."
+    "Find the latest company sustainability reporting "
+    "and extract only the SDGs the company explicitly identifies "
+    "together with associated targets."
 )
 
 
@@ -911,508 +1224,389 @@ st.caption(
 
 with st.sidebar:
 
-    st.header(
-        "Company"
-    )
+    st.header("Company")
 
     company = st.text_input(
         "Company name",
         "Nedbank"
     )
 
-    max_reports = st.slider(
-        "Reports / sources to collect",
-        4,
-        15,
-        10
+    run = st.button(
+        "Find latest SDG data",
+        type="primary",
+        use_container_width=True
     )
 
-    run = st.button(
-        "Research company",
-        type="primary"
+    st.divider()
+
+    st.subheader(
+        "Optional report URL"
+    )
+
+    manual_url = st.text_input(
+        "Paste official sustainability report URL",
+        placeholder="https://company.com/report.pdf"
     )
 
     st.divider()
 
     st.markdown(
         """
-        ### Methodology
+### Methodology
 
-        The application:
+The app does **not** score all 17 SDGs.
 
-        1. Searches for current company reports.
-        2. Identifies explicit SDG references.
-        3. Looks for company commitments.
-        4. Extracts targets.
-        5. Identifies target years.
-        6. Shows the original source.
+An SDG is returned only when the company appears to
+explicitly identify, prioritise, align with or report against it.
 
-        An SDG is **not** treated as a company priority
-        simply because an unrelated keyword appears.
-        """
+The extracted target must then be reviewed by an analyst
+before being used for investment, reporting or client purposes.
+"""
     )
 
 
 # ============================================================
-# RUN
+# MAIN ACTION
 # ============================================================
 
 if run:
 
     if not company.strip():
 
-        st.warning(
+        st.error(
             "Please enter a company name."
         )
 
         st.stop()
 
-    # --------------------------------------------------------
-    # SEARCH
-    # --------------------------------------------------------
-
-    with st.spinner(
-        "Searching for the company's latest sustainability and ESG reports..."
-    ):
-
-        try:
-
-            report_results = find_company_reports(
-                company,
-                max_reports
-            )
-
-        except Exception as e:
-
-            st.error(
-                "The web search service could not be reached."
-            )
-
-            st.info(
-                "Please try again in a few seconds."
-            )
-
-            st.caption(
-                f"Technical detail: {e}"
-            )
-
-            st.stop()
-
-    if not report_results:
+    if not PDF_AVAILABLE:
 
         st.warning(
-            "No company reports were found."
+            "PDF support is not installed. "
+            "Install pypdf using: pip install pypdf"
         )
+
+    with st.spinner(
+        "Finding the latest sustainability report..."
+    ):
+
+        if manual_url.strip():
+
+            selected_report = {
+                "title": "Manually supplied report",
+                "url": manual_url.strip(),
+                "year": "",
+                "relevance": 100,
+            }
+
+            pages = get_document_pages(
+                manual_url.strip()
+            )
+
+            profile = build_sdg_profile(
+                company,
+                selected_report,
+                pages
+            )
+
+            result = {
+                "reports": [
+                    selected_report
+                ],
+                "selected_report":
+                    selected_report,
+                "profile":
+                    profile,
+                "error": ""
+            }
+
+        else:
+
+            result = collect_company_data(
+                company
+            )
+
+
+    # ========================================================
+    # ERROR
+    # ========================================================
+
+    if result.get("error"):
+
+        st.warning(
+            result["error"]
+        )
+
+        if result.get(
+            "selected_report"
+        ):
+
+            report = result[
+                "selected_report"
+            ]
+
+            st.markdown(
+                f"**Report found:** "
+                f"{report['title']}"
+            )
+
+            st.link_button(
+                "Open report",
+                report["url"]
+            )
 
         st.stop()
 
 
-    # --------------------------------------------------------
-    # FETCH REPORTS
-    # --------------------------------------------------------
+    selected_report = result[
+        "selected_report"
+    ]
 
-    analysed_reports = []
-
-    progress = st.progress(0)
-
-    for i, result in enumerate(
-        report_results
-    ):
-
-        text = fetch_page(
-            result["url"]
-        )
-
-        if text:
-
-            analysed_reports.append({
-
-                **result,
-
-                "page_text": text,
-
-                "reporting_year":
-                    detect_report_year(
-                        text
-                    ),
-
-                "report_type":
-                    identify_report_type(
-                        result["title"],
-                        text
-                    )
-            })
-
-        progress.progress(
-            (i + 1)
-            / len(report_results)
-        )
-
-    progress.empty()
-
-
-    # --------------------------------------------------------
-    # BUILD SDG PROFILE
-    # --------------------------------------------------------
-
-    with st.spinner(
-        "Identifying explicitly prioritised SDGs and extracting targets..."
-    ):
-
-        profile = build_sdg_profile(
-            company,
-            analysed_reports
-        )
+    profile = result[
+        "profile"
+    ]
 
 
     # ========================================================
-    # COMPANY SUMMARY
+    # REPORT FOUND
     # ========================================================
+
+    st.success(
+        "Latest relevant company report found."
+    )
 
     st.subheader(
-        f"{company} — SDG Profile"
+        "Source report"
     )
 
-    st.write(
-        "The profile below contains only SDGs for which "
-        "the available company disclosures contain an "
-        "explicit SDG reference or commitment-related "
-        "evidence."
+    report_col1, report_col2 = st.columns(
+        [4, 1]
     )
 
-    st.metric(
-        "Explicitly identified SDGs",
-        len(profile)
-    )
+    with report_col1:
+
+        st.markdown(
+            f"**{selected_report['title']}**"
+        )
+
+        st.caption(
+            selected_report["url"]
+        )
+
+    with report_col2:
+
+        st.link_button(
+            "Open report",
+            selected_report["url"]
+        )
 
 
     # ========================================================
-    # NO SDGS FOUND
+    # NO EXPLICIT SDGs
     # ========================================================
 
     if not profile:
 
         st.warning(
-            "No explicit company SDG priorities could be "
-            "identified from the sources collected."
+            "No SDGs were identified as explicitly supported "
+            "or prioritised in the extracted report evidence."
         )
 
         st.info(
-            "This does not mean the company has no SDG "
-            "activities. It means the available webpages "
-            "did not provide sufficiently explicit evidence."
+            "The app deliberately does not infer SDG support "
+            "from general ESG topics or keyword mentions."
         )
 
-    else:
+        st.stop()
 
-        # ====================================================
-        # SDG TABLE
-        # ====================================================
 
-        st.divider()
+    # ========================================================
+    # SUMMARY
+    # ========================================================
 
-        st.subheader(
-            "Company-identified SDGs"
-        )
+    st.divider()
 
-        table_rows = []
+    st.subheader(
+        f"Explicitly identified SDGs — {company}"
+    )
 
-        for sdg_number in sorted(
-            profile.keys()
+    st.metric(
+        "SDGs identified",
+        len(profile)
+    )
+
+
+    # ========================================================
+    # SDG CARDS
+    # ========================================================
+
+    for item in profile:
+
+        with st.container(
+            border=True
         ):
 
-            item = profile[
-                sdg_number
-            ]
+            left, right = st.columns(
+                [1, 3]
+            )
 
-            table_rows.append({
+            with left:
 
-                "SDG":
-                    f"SDG {sdg_number}",
+                st.markdown(
+                    f"### {item['SDG']}"
+                )
 
-                "SDG Name":
-                    item["name"],
+                st.markdown(
+                    f"**{item['SDG Name']}**"
+                )
 
-                "Evidence confidence":
-                    item["confidence"],
+                st.success(
+                    "Explicit company identification"
+                )
 
-                "Targets identified":
-                    len(
-                        item["targets"]
-                    ),
+            with right:
 
-                "Target year":
-                    item["target_year"],
+                st.markdown(
+                    "**Target / Commitment**"
+                )
 
-                "Quantitative target":
-                    item[
-                        "quantitative_target"
-                    ]
-            })
+                if item[
+                    "Target / Commitment"
+                ]:
+
+                    st.write(
+                        item[
+                            "Target / Commitment"
+                        ]
+                    )
+
+                else:
+
+                    st.write(
+                        "No specific target extracted."
+                    )
+
+                target_col1, target_col2 = st.columns(
+                    2
+                )
+
+                with target_col1:
+
+                    st.markdown(
+                        "**Target year**"
+                    )
+
+                    st.write(
+                        item[
+                            "Target Year"
+                        ]
+                        or "Not identified"
+                    )
+
+                with target_col2:
+
+                    st.markdown(
+                        "**Quantitative target**"
+                    )
+
+                    st.write(
+                        item[
+                            "Quantitative Target"
+                        ]
+                        or "Not identified"
+                    )
+
+            st.markdown(
+                "**Evidence from report**"
+            )
+
+            st.info(
+                item["Evidence"]
+            )
+
+            st.caption(
+                f"Page: {item['Page Reference']} | "
+                f"Confidence: {item['Evidence Confidence']}"
+            )
+
+            st.link_button(
+                "Open source report",
+                item["Source"]
+            )
+
+
+    # ========================================================
+    # DATA TABLE
+    # ========================================================
+
+    st.divider()
+
+    st.subheader(
+        "Export-ready SDG dataset"
+    )
+
+    try:
+
+        import pandas as pd
+
+        df = pd.DataFrame(
+            profile
+        )
 
         st.dataframe(
-            table_rows,
+            df,
             use_container_width=True,
             hide_index=True
         )
 
-
-        # ====================================================
-        # DETAILED SDG INFORMATION
-        # ====================================================
-
-        st.divider()
-
-        st.subheader(
-            "SDG Targets and Commitments"
+        csv = df.to_csv(
+            index=False
+        ).encode(
+            "utf-8"
         )
 
-        for sdg_number in sorted(
-            profile.keys()
-        ):
+        st.download_button(
+            "Download SDG data as CSV",
+            csv,
+            file_name=(
+                f"{normalise_company(company)}"
+                "_SDG_Data.csv"
+            ),
+            mime="text/csv"
+        )
 
-            item = profile[
-                sdg_number
-            ]
+    except Exception as e:
 
-            with st.expander(
-                f"SDG {sdg_number} — {item['name']}",
-                expanded=True
-            ):
-
-                st.markdown(
-                    f"### SDG {sdg_number}: "
-                    f"{item['name']}"
-                )
-
-                st.write(
-                    f"**Evidence confidence:** "
-                    f"{item['confidence']}"
-                )
-
-                # ------------------------------------------------
-                # TARGETS
-                # ------------------------------------------------
-
-                st.markdown(
-                    "#### 🎯 Targets / Commitments"
-                )
-
-                if item["targets"]:
-
-                    for target in item[
-                        "targets"
-                    ]:
-
-                        st.markdown(
-                            f"- {target}"
-                        )
-
-                else:
-
-                    st.info(
-                        "No specific target was identified "
-                        "from the available disclosure."
-                    )
-
-
-                # ------------------------------------------------
-                # TARGET YEAR
-                # ------------------------------------------------
-
-                st.markdown(
-                    "#### 📅 Target year"
-                )
-
-                st.write(
-                    item["target_year"]
-                )
-
-
-                # ------------------------------------------------
-                # QUANTITATIVE TARGET
-                # ------------------------------------------------
-
-                st.markdown(
-                    "#### 📊 Quantitative target"
-                )
-
-                st.write(
-                    item[
-                        "quantitative_target"
-                    ]
-                )
-
-
-                # ------------------------------------------------
-                # COMPANY EVIDENCE
-                # ------------------------------------------------
-
-                st.markdown(
-                    "#### 🔎 Company disclosure evidence"
-                )
-
-                if item["evidence"]:
-
-                    for evidence in item[
-                        "evidence"
-                    ][:5]:
-
-                        st.write(
-                            evidence
-                        )
-
-                        st.divider()
-
-                else:
-
-                    st.info(
-                        "No supporting passage was extracted."
-                    )
-
-
-                # ------------------------------------------------
-                # SOURCES
-                # ------------------------------------------------
-
-                st.markdown(
-                    "#### 📚 Sources"
-                )
-
-                for source in item[
-                    "sources"
-                ]:
-
-                    st.markdown(
-                        f"**{source['title']}**"
-                    )
-
-                    st.write(
-                        f"Report type: "
-                        f"{source['report_type']}"
-                    )
-
-                    st.write(
-                        f"Reporting year: "
-                        f"{source['year']}"
-                    )
-
-                    st.link_button(
-                        "Open source",
-                        source["url"]
-                    )
+        st.error(
+            f"Could not create export table: {e}"
+        )
 
 
     # ========================================================
-    # REPORTS FOUND
+    # REPORTS DISCOVERED
     # ========================================================
 
-    st.divider()
+    with st.expander(
+        "Other reports discovered"
+    ):
 
-    st.subheader(
-        "📚 Company Reports Found"
-    )
+        for report in result[
+            "reports"
+        ]:
 
-    for report in analysed_reports:
-
-        with st.expander(
-            report["title"]
-        ):
-
-            st.write(
-                f"**Report type:** "
-                f"{report['report_type']}"
+            st.markdown(
+                f"**{report['title']}**"
             )
 
-            st.write(
-                f"**Reporting year:** "
-                f"{report['reporting_year']}"
+            st.caption(
+                f"Year: {report.get('year', 'Unknown')} | "
+                f"Relevance: {report.get('relevance', 0)}"
             )
-
-            if report["snippet"]:
-
-                st.write(
-                    report["snippet"]
-                )
 
             st.link_button(
-                "Open report / source",
+                "Open",
                 report["url"]
             )
-
-
-    # ========================================================
-    # DATA QUALITY WARNING
-    # ========================================================
-
-    st.divider()
-
-    st.subheader(
-        "⚠️ Data Quality & Analyst Review"
-    )
-
-    st.warning(
-        """
-        This application extracts information from publicly
-        accessible webpages. It should not assume that an
-        SDG is a company priority merely because the SDG's
-        terminology appears in a document.
-
-        Analysts should verify:
-
-        • The SDG is explicitly identified by the company.
-        • The target belongs to the company.
-        • The target is current.
-        • The target year is correct.
-        • The metric and baseline are correctly interpreted.
-        • The source is the company's official disclosure.
-        • Any extracted target is not merely a general
-          industry or UN target.
-        """
-    )
-
-
-    # ========================================================
-    # EXPORT-READY STRUCTURE
-    # ========================================================
-
-    st.divider()
-
-    st.subheader(
-        "📋 Structured Scorecard Fields"
-    )
-
-    st.write(
-        """
-        The information collected by this prototype can
-        eventually be stored using the following structure:
-        """
-    )
-
-    st.code(
-        """
-Company
-Sector
-SDG
-SDG Name
-Company SDG Priority
-Evidence Confidence
-Target / Commitment
-Target Year
-Baseline
-Current Value
-Target Value
-Unit
-Progress
-Source
-Report Name
-Reporting Year
-Page Reference
-Analyst Review
-Analyst Comment
-        """,
-        language="text"
-    )
 
 
 # ============================================================
@@ -1423,98 +1617,80 @@ else:
 
     st.info(
         "Enter a company and click "
-        "**Research company**."
+        "**Find latest SDG data**."
     )
 
     st.markdown(
         """
-## 🌍 What this version does
+## How Version 3 works
 
-This version is designed around a different question:
+### 1. Find the latest report
 
-> **Which SDGs does the company itself identify as priorities,
-> and what targets has it disclosed against those SDGs?**
-
-### 1. Finds current company disclosures
-
-The application searches for:
+The app searches for:
 
 - Sustainability Reports
 - ESG Reports
 - Integrated Reports
-- Annual Reports
-- Climate Reports
-- Society Reports
-- ESG data books
-- Sustainability data reports
+- SDG-related company reports
 
-### 2. Identifies explicit SDGs
+It prioritises recent reports and company-domain sources.
 
-The application looks for explicit references such as:
+### 2. Extract the report
 
-**SDG 7**
+Where the source is a PDF, the app extracts the report text
+page by page so that the source page can be retained.
 
-or
+### 3. Identify explicit SDGs
 
-**Affordable and Clean Energy**
+The app looks for language such as:
 
-combined with company commitment language.
+- Priority SDGs
+- Our SDGs
+- Focus SDGs
+- Key SDGs
+- Identified SDGs
+- Aligned with the SDGs
+- Contribution to the SDGs
+- SDG alignment
 
-### 3. Does not score all 17 SDGs
+### 4. Extract targets
 
-If a company explicitly identifies only certain SDGs,
-only those SDGs are returned.
+The app then looks for targets associated with those SDGs,
+including:
 
-### 4. Extracts targets
+- Percentage targets
+- Reduction targets
+- Increase targets
+- Net-zero commitments
+- Target years
+- Quantitative KPIs
 
-For each identified SDG, the application attempts to
-extract:
+### 5. Return only company-supported SDGs
 
-- Target
-- Commitment
-- Target year
-- Quantitative target
-- Supporting evidence
-- Source
+If a report mentions SDG 13 in passing but does not indicate
+that the company identifies or supports it, the SDG is **not
+returned as a supported SDG**.
 
-### 5. Keeps the source
+This is deliberately different from a keyword-based SDG score.
 
-Every extracted SDG and target should be traceable back
-to the source document or webpage.
+### 6. Analyst validation
 
----
+Every extracted result includes:
 
-## Recommended final methodology
+**Company → SDG → Target → Target Year → Evidence → Page → Source**
 
-For your actual SDG company scorecard, I would eventually
-structure the data as:
-
-**Company**
-↓
-**Sector**
-↓
-**Company-identified SDGs**
-↓
-**SDG target**
-↓
-**KPI**
-↓
-**Baseline**
-↓
-**Current value**
-↓
-**Target value**
-↓
-**Target year**
-↓
-**Progress**
-↓
-**Analyst assessment**
-
-This is preferable to assigning a score simply because
-a sustainability report contains many references to a
-particular SDG.
+The analyst can then validate the disclosure before it is
+used in an ESG or investment workflow.
 """
     )
 
+    st.divider()
 
+    st.markdown(
+        """
+### Required packages
+
+Run:
+
+```bash
+pip install streamlit requests beautifulsoup4 pypdf pandas
