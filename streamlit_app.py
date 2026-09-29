@@ -1687,7 +1687,7 @@ used in an ESG or investment workflow.
     st.divider()
 
     st.markdown()
-        """
+       
 ### Required packages
 
 Install the required packages from your terminal:
